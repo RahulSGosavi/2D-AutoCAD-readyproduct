@@ -153,6 +153,14 @@ CORS_ORIGIN=http://localhost:5173
 
 ## 📦 Deployment
 
+### Render Deployment (Recommended)
+See **[RENDER_DEPLOYMENT.md](./RENDER_DEPLOYMENT.md)** for step-by-step Render deployment instructions.
+
+**Quick Deploy:**
+1. Backend: Web Service on Render (root: `backend`)
+2. Frontend: Static Site on Render (root: `.`)
+3. Set environment variables as documented
+
 ### Option 1: Traditional Server
 - Deploy backend with PM2
 - Deploy frontend to Nginx
