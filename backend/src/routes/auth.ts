@@ -85,8 +85,9 @@ router.post(
       if (!jwtSecret) {
         throw new AppError('JWT_SECRET not configured', 500);
       }
+      const expiresIn: string = process.env.JWT_EXPIRES_IN || '7d';
       const signOptions: SignOptions = {
-        expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+        expiresIn: expiresIn,
       };
       const token = jwt.sign(
         {
@@ -162,8 +163,9 @@ router.post(
       if (!jwtSecret) {
         throw new AppError('JWT_SECRET not configured', 500);
       }
+      const expiresIn: string = process.env.JWT_EXPIRES_IN || '7d';
       const signOptions: SignOptions = {
-        expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+        expiresIn: expiresIn,
       };
       const token = jwt.sign(
         {
