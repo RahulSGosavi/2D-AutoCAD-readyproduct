@@ -1,8 +1,8 @@
-import express from 'express';
+import express, { Response, NextFunction } from 'express';
 import { body, validationResult } from 'express-validator';
-import sql from '../config/db.js';
-import { authenticate, AuthRequest } from '../middleware/auth.js';
-import { AppError } from '../middleware/errorHandler.js';
+import sql from '../config/db';
+import { authenticate, AuthRequest } from '../middleware/auth';
+import { AppError } from '../middleware/errorHandler';
 
 const router = express.Router();
 
@@ -84,7 +84,7 @@ router.post(
     body('name').trim().notEmpty().withMessage('Project name is required'),
     body('description').trim().optional(),
   ],
-  async (req: AuthRequest, res, next) => {
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
@@ -124,7 +124,7 @@ router.put(
     body('name').trim().optional(),
     body('description').trim().optional(),
   ],
-  async (req: AuthRequest, res, next) => {
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
       const { name, description } = req.body;
@@ -179,7 +179,7 @@ router.put(
 router.post(
   '/:id/data',
   [body('data').notEmpty().withMessage('Project data is required')],
-  async (req: AuthRequest, res, next) => {
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {

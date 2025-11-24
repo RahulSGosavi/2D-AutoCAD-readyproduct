@@ -12,7 +12,7 @@ if (!connectionString) {
   console.error('   DATABASE_URL=postgresql://postgres:oUYxwmuAv66U9bw7@db.ehbrtcvtelsvsphvairj.supabase.co:5432/postgres');
 }
 
-const sql = postgres(connectionString, {
+const sql = postgres(connectionString || '', {
   max: 20,
   idle_timeout: 30,
   connect_timeout: 10,

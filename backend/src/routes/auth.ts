@@ -1,9 +1,9 @@
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { body, validationResult } from 'express-validator';
-import sql from '../config/db.js';
-import { AppError } from '../middleware/errorHandler.js';
+import sql from '../config/db';
+import { AppError } from '../middleware/errorHandler';
 
 const router = express.Router();
 
@@ -17,7 +17,7 @@ router.post(
     body('firstName').trim().optional(),
     body('lastName').trim().optional(),
   ],
-  async (req, res, next) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
@@ -81,13 +81,17 @@ router.post(
       const user = userResult[0];
 
       // Generate JWT token
+      const jwtSecret = process.env.JWT_SECRET;
+      if (!jwtSecret) {
+        throw new AppError('JWT_SECRET not configured', 500);
+      }
       const token = jwt.sign(
         {
           userId: user.id,
           companyId: company.id,
           role: user.role,
         },
-        process.env.JWT_SECRET!,
+        jwtSecret,
         { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
       );
 
@@ -120,7 +124,7 @@ router.post(
     body('email').isEmail().normalizeEmail(),
     body('password').notEmpty(),
   ],
-  async (req, res, next) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
@@ -151,13 +155,17 @@ router.post(
       }
 
       // Generate JWT token
+      const jwtSecret = process.env.JWT_SECRET;
+      if (!jwtSecret) {
+        throw new AppError('JWT_SECRET not configured', 500);
+      }
       const token = jwt.sign(
         {
           userId: user.id,
           companyId: user.company_id,
           role: user.role,
         },
-        process.env.JWT_SECRET!,
+        jwtSecret,
         { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
       );
 

@@ -21,7 +21,7 @@ pool.on('connect', () => {
   console.log('✅ Database connected successfully');
 });
 
-pool.on('error', (err) => {
+pool.on('error', (err: NodeJS.ErrnoException) => {
   console.error('❌ Database connection error:', err);
   if (err.code === 'ECONNREFUSED') {
     console.error('💡 PostgreSQL is not running or not accessible');
