@@ -1,6 +1,6 @@
 import express, { Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions } from 'jsonwebtoken';
 import { body, validationResult } from 'express-validator';
 import sql from '../config/db';
 import { AppError } from '../middleware/errorHandler';
@@ -86,6 +86,9 @@ router.post(
         throw new AppError('JWT_SECRET not configured', 500);
       }
       const expiresIn = process.env.JWT_EXPIRES_IN || '7d';
+      const options: SignOptions = {
+        expiresIn: expiresIn as string | number,
+      };
       const token = jwt.sign(
         {
           userId: user.id,
@@ -93,7 +96,7 @@ router.post(
           role: user.role,
         },
         jwtSecret,
-        { expiresIn }
+        options
       );
 
       res.status(201).json({
@@ -161,6 +164,9 @@ router.post(
         throw new AppError('JWT_SECRET not configured', 500);
       }
       const expiresIn = process.env.JWT_EXPIRES_IN || '7d';
+      const options: SignOptions = {
+        expiresIn: expiresIn as string | number,
+      };
       const token = jwt.sign(
         {
           userId: user.id,
@@ -168,7 +174,7 @@ router.post(
           role: user.role,
         },
         jwtSecret,
-        { expiresIn }
+        options
       );
 
       res.json({
