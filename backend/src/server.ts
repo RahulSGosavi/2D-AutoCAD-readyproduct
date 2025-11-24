@@ -47,6 +47,15 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('combined'));
 }
 
+// Basic root route for uptime checks
+app.get('/', (req, res) => {
+  res.json({
+    service: 'KAB 2D Design Tool API',
+    status: 'ok',
+    docs: '/api',
+  });
+});
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
