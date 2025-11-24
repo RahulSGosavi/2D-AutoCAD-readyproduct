@@ -12,13 +12,17 @@ router.use(authenticate);
 // Get all projects for the user's company
 router.get('/', async (req: AuthRequest, res, next) => {
   try {
+    if (!req.companyId) {
+      throw new AppError('Unauthorized', 401);
+    }
+    const companyId: string = req.companyId;
     const result = await sql`
       SELECT p.id, p.name, p.description, p.status, p.created_at, p.updated_at,
              u.email as created_by,
              (SELECT COUNT(*) FROM project_data pd WHERE pd.project_id = p.id) as version_count
       FROM projects p
       JOIN users u ON p.user_id = u.id
-      WHERE p.company_id = ${req.companyId}
+      WHERE p.company_id = ${companyId}
       ORDER BY p.updated_at DESC
     `;
 
@@ -32,13 +36,17 @@ router.get('/', async (req: AuthRequest, res, next) => {
 router.get('/:id', async (req: AuthRequest, res, next) => {
   try {
     const { id } = req.params;
+    if (!req.companyId) {
+      throw new AppError('Unauthorized', 401);
+    }
+    const companyId: string = req.companyId;
 
     // Get project
     const projectResult = await sql`
       SELECT p.*, u.email as created_by
       FROM projects p
       JOIN users u ON p.user_id = u.id
-      WHERE p.id = ${id} AND p.company_id = ${req.companyId}
+      WHERE p.id = ${id} AND p.company_id = ${companyId}
     `;
 
     if (projectResult.length === 0) {
@@ -92,11 +100,20 @@ router.post(
       }
 
       const { name, description, data } = req.body;
+      
+      if (!req.companyId || !req.userId) {
+        throw new AppError('Unauthorized', 401);
+      }
+      const companyId: string = req.companyId;
+      const userId: string = req.userId;
+
+      // Convert undefined to null for database
+      const descriptionValue: string | null = description ?? null;
 
       // Create project
       const projectResult = await sql`
         INSERT INTO projects (company_id, user_id, name, description)
-        VALUES (${req.companyId}, ${req.userId}, ${name}, ${description || null})
+        VALUES (${companyId}, ${userId}, ${name}, ${descriptionValue})
         RETURNING *
       `;
 
@@ -128,10 +145,15 @@ router.put(
     try {
       const { id } = req.params;
       const { name, description } = req.body;
+      
+      if (!req.companyId) {
+        throw new AppError('Unauthorized', 401);
+      }
+      const companyId: string = req.companyId;
 
       // Verify project belongs to company
       const checkResult = await sql`
-        SELECT id FROM projects WHERE id = ${id} AND company_id = ${req.companyId}
+        SELECT id FROM projects WHERE id = ${id} AND company_id = ${companyId}
       `;
 
       if (checkResult.length === 0) {
@@ -143,27 +165,30 @@ router.put(
         return res.json({ message: 'No fields to update' });
       }
 
+      // Convert undefined to null for database
+      const descriptionValue: string | null = description ?? null;
+
       // Use conditional updates with postgres template syntax
       let result;
       if (name !== undefined && description !== undefined) {
         result = await sql`
           UPDATE projects 
-          SET name = ${name}, description = ${description}
-          WHERE id = ${id} AND company_id = ${req.companyId}
+          SET name = ${name}, description = ${descriptionValue}
+          WHERE id = ${id} AND company_id = ${companyId}
           RETURNING *
         `;
       } else if (name !== undefined) {
         result = await sql`
           UPDATE projects 
           SET name = ${name}
-          WHERE id = ${id} AND company_id = ${req.companyId}
+          WHERE id = ${id} AND company_id = ${companyId}
           RETURNING *
         `;
       } else {
         result = await sql`
           UPDATE projects 
-          SET description = ${description}
-          WHERE id = ${id} AND company_id = ${req.companyId}
+          SET description = ${descriptionValue}
+          WHERE id = ${id} AND company_id = ${companyId}
           RETURNING *
         `;
       }
@@ -188,10 +213,15 @@ router.post(
 
       const { id } = req.params;
       const { data } = req.body;
+      
+      if (!req.companyId) {
+        throw new AppError('Unauthorized', 401);
+      }
+      const companyId: string = req.companyId;
 
       // Verify project belongs to company
       const checkResult = await sql`
-        SELECT id FROM projects WHERE id = ${id} AND company_id = ${req.companyId}
+        SELECT id FROM projects WHERE id = ${id} AND company_id = ${companyId}
       `;
 
       if (checkResult.length === 0) {
@@ -229,9 +259,13 @@ router.post(
 );
 
 // Delete project
-router.delete('/:id', async (req: AuthRequest, res, next) => {
+router.delete('/:id', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
+    
+    if (!req.companyId) {
+      throw new AppError('Unauthorized', 401);
+    }
 
     // Verify project belongs to company
     const checkResult = await sql`
