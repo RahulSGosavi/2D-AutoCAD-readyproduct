@@ -1,8 +1,8 @@
 import express, { Response, NextFunction } from 'express';
 import { body, validationResult } from 'express-validator';
-import sql from '../config/db';
-import { authenticate, AuthRequest } from '../middleware/auth';
-import { AppError } from '../middleware/errorHandler';
+import sql from '../config/db.js';
+import { authenticate, AuthRequest } from '../middleware/auth.js';
+import { AppError } from '../middleware/errorHandler.js';
 
 const router = express.Router();
 

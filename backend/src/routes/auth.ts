@@ -3,8 +3,8 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import type { StringValue } from 'ms';
 import { body, validationResult } from 'express-validator';
-import sql from '../config/db';
-import { AppError } from '../middleware/errorHandler';
+import sql from '../config/db.js';
+import { AppError } from '../middleware/errorHandler.js';
 
 const router = express.Router();
 

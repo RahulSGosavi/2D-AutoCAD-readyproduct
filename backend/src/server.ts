@@ -5,10 +5,10 @@ import compression from 'compression';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
-import authRoutes from './routes/auth';
-import projectRoutes from './routes/projects';
-import { errorHandler, notFoundHandler } from './middleware/errorHandler';
-import sql from './config/db';
+import authRoutes from './routes/auth.js';
+import projectRoutes from './routes/projects.js';
+import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
+import sql from './config/db.js';
 
 dotenv.config();
 
