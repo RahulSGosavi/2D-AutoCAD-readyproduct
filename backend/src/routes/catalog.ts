@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Response, NextFunction } from 'express';
 import { body, validationResult } from 'express-validator';
 import { authenticate, type AuthRequest } from '../middleware/auth.js';
 import type { BlockDefinition } from '../data/blockCatalog.js';
@@ -10,7 +10,7 @@ router.use(authenticate);
 
 let runtimeCatalog: BlockDefinition[] = [...BLOCK_CATALOG];
 
-router.get('/blocks', (_req, res) => {
+router.get('/blocks', (_req, res: Response) => {
   res.json({ blocks: runtimeCatalog });
 });
 
@@ -23,7 +23,7 @@ router.post(
     body('width').isNumeric(),
     body('height').isNumeric(),
   ],
-  (req: AuthRequest, res, next) => {
+  (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
