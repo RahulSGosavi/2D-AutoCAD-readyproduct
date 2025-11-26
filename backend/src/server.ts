@@ -7,6 +7,7 @@ import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth.js';
 import projectRoutes from './routes/projects.js';
+import catalogRoutes from './routes/catalog.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import sql from './config/db.js';
 
@@ -64,6 +65,7 @@ app.get('/health', (req, res) => {
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/projects', projectRoutes);
+app.use('/api/catalog', catalogRoutes);
 
 // Error handling
 app.use(notFoundHandler);

@@ -1,5 +1,6 @@
 import type { EditorElement, Layer } from '../state/useEditorStore';
 import { convertPDFToImage } from './pdf-converter';
+import { convertPDFToVectorElements } from './pdf-to-vector';
 
 export interface ProjectData {
   layers: Layer[];
@@ -105,6 +106,84 @@ export const handleLocalFileUpload = (
       onLoad(data);
     } catch (error) {
       onError(error instanceof Error ? error.message : 'Upload failed');
+    }
+  };
+  input.click();
+};
+
+/**
+ * Import PDF and convert to editable vector elements
+ */
+export const importPDFAsVectors = async (
+  file: File,
+  layerId: string,
+  options: {
+    pageNumber?: number;
+    scale?: number;
+    alsoLoadAsBackground?: boolean;
+  } = {}
+): Promise<{
+  elements: EditorElement[];
+  backgroundImage?: string;
+  width: number;
+  height: number;
+  pageCount: number;
+}> => {
+  const { pageNumber = 1, scale = 1, alsoLoadAsBackground = true } = options;
+  
+  // Convert PDF to vector elements
+  const result = await convertPDFToVectorElements(file, layerId, pageNumber, scale);
+  
+  let backgroundImage: string | undefined;
+  
+  // Also load as background image for reference
+  if (alsoLoadAsBackground) {
+    const pdfPage = await convertPDFToImage(file, pageNumber);
+    if (pdfPage) {
+      backgroundImage = pdfPage.imageData;
+    }
+  }
+  
+  return {
+    elements: result.elements,
+    backgroundImage,
+    width: result.width,
+    height: result.height,
+    pageCount: result.pageCount,
+  };
+};
+
+/**
+ * Handle PDF file upload with vector conversion option
+ */
+export const handlePDFUploadWithVectors = (
+  onLoad: (data: {
+    elements: EditorElement[];
+    backgroundImage?: string;
+    width: number;
+    height: number;
+    pageCount: number;
+  }) => void,
+  onError: (error: string) => void,
+  layerId: string,
+  options?: {
+    pageNumber?: number;
+    scale?: number;
+    alsoLoadAsBackground?: boolean;
+  }
+) => {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.pdf';
+  input.onchange = async (e) => {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+    
+    try {
+      const result = await importPDFAsVectors(file, layerId, options);
+      onLoad(result);
+    } catch (error) {
+      onError(error instanceof Error ? error.message : 'PDF import failed');
     }
   };
   input.click();

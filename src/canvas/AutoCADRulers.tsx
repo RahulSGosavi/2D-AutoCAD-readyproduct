@@ -1,5 +1,6 @@
 // src/canvas/AutoCADRulers.tsx
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
+import { useEditorStore } from '../state/useEditorStore';
 
 interface AutoCADRulersProps {
   width: number;
@@ -16,112 +17,139 @@ export const AutoCADRulers: React.FC<AutoCADRulersProps> = ({
   scale,
   offsetX,
   offsetY,
-  gridSize,
 }) => {
-  const rulerHeight = 20;
-  const rulerWidth = 20;
+  const drawingSettings = useEditorStore((state) => state.drawingSettings);
+  // Use strokeColor from drawingSettings - this changes when user selects color
+  const textColor = drawingSettings.strokeColor;
+  
+  const hCanvasRef = useRef<HTMLCanvasElement>(null);
+  const vCanvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Calculate visible range
-  const startX = -offsetX / scale;
-  const endX = (width - offsetX) / scale;
-  const startY = -offsetY / scale;
-  const endY = (height - offsetY) / scale;
+  const RULER_SIZE = 24;
 
-  // Generate tick marks
-  const ticksX: Array<{ pos: number; label: string }> = [];
-  const ticksY: Array<{ pos: number; label: string }> = [];
+  const getStep = (s: number) => {
+    const px = 100 * s;
+    if (px < 30) return 500;
+    if (px < 60) return 200;
+    if (px < 120) return 100;
+    if (px < 240) return 50;
+    return 20;
+  };
 
-  const step = gridSize * Math.max(1, Math.floor(50 / (gridSize * scale)));
-  const startTickX = Math.floor(startX / step) * step;
-  const startTickY = Math.floor(startY / step) * step;
+  // Draw horizontal ruler
+  useEffect(() => {
+    const canvas = hCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
-  for (let x = startTickX; x <= endX; x += step) {
-    if (x >= startX) {
-      ticksX.push({ pos: x, label: x.toFixed(0) });
+    const dpr = window.devicePixelRatio || 1;
+    const w = width - RULER_SIZE;
+    canvas.width = w * dpr;
+    canvas.height = RULER_SIZE * dpr;
+    canvas.style.width = w + 'px';
+    canvas.style.height = RULER_SIZE + 'px';
+    ctx.scale(dpr, dpr);
+
+    // Clear - transparent background
+    ctx.clearRect(0, 0, w, RULER_SIZE);
+
+    const step = getStep(scale);
+    const start = Math.floor((-offsetX + RULER_SIZE) / scale / step) * step;
+    const end = Math.ceil((width - offsetX) / scale / step) * step;
+
+    for (let v = start; v <= end; v += step) {
+      const x = v * scale + offsetX - RULER_SIZE;
+      if (x < -20 || x > w + 20) continue;
+
+      // Tick line - uses strokeColor
+      ctx.fillStyle = textColor;
+      ctx.fillRect(x, RULER_SIZE - 5, 1, 5);
+
+      // Number - uses strokeColor, no background
+      ctx.fillStyle = textColor;
+      ctx.font = '12px Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(v), x, 10);
     }
-  }
+  }, [width, scale, offsetX, textColor]);
 
-  for (let y = startTickY; y <= endY; y += step) {
-    if (y >= startY) {
-      ticksY.push({ pos: y, label: y.toFixed(0) });
+  // Draw vertical ruler
+  useEffect(() => {
+    const canvas = vCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const h = height - RULER_SIZE;
+    canvas.width = RULER_SIZE * dpr;
+    canvas.height = h * dpr;
+    canvas.style.width = RULER_SIZE + 'px';
+    canvas.style.height = h + 'px';
+    ctx.scale(dpr, dpr);
+
+    // Clear - transparent background
+    ctx.clearRect(0, 0, RULER_SIZE, h);
+
+    const step = getStep(scale);
+    const start = Math.floor((-offsetY + RULER_SIZE) / scale / step) * step;
+    const end = Math.ceil((height - offsetY) / scale / step) * step;
+
+    for (let v = start; v <= end; v += step) {
+      const y = v * scale + offsetY - RULER_SIZE;
+      if (y < -20 || y > h + 20) continue;
+
+      // Tick line - uses strokeColor
+      ctx.fillStyle = textColor;
+      ctx.fillRect(RULER_SIZE - 5, y, 5, 1);
+
+      // Number - uses strokeColor, no background
+      ctx.fillStyle = textColor;
+      ctx.font = '11px Arial, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(v), RULER_SIZE - 7, y);
     }
-  }
+  }, [height, scale, offsetY, textColor]);
 
   return (
     <>
-      {/* Top Ruler */}
-      <div
-        className="absolute top-0 left-0 bg-slate-700 border-b border-slate-600 z-10"
-        style={{ width: `${width}px`, height: `${rulerHeight}px`, left: `${rulerWidth}px` }}
-      >
-        <svg width={width} height={rulerHeight} className="absolute">
-          {ticksX.map((tick) => {
-            const screenX = tick.pos * scale + offsetX;
-            return (
-              <g key={tick.pos}>
-                <line
-                  x1={screenX}
-                  y1={0}
-                  x2={screenX}
-                  y2={rulerHeight}
-                  stroke="#94a3b8"
-                  strokeWidth={1}
-                />
-                <text
-                  x={screenX + 2}
-                  y={rulerHeight - 4}
-                  fontSize="10"
-                  fill="#cbd5e1"
-                  className="select-none"
-                >
-                  {tick.label}
-                </text>
-              </g>
-            );
-          })}
-        </svg>
-      </div>
-
-      {/* Left Ruler */}
-      <div
-        className="absolute top-0 left-0 bg-slate-700 border-r border-slate-600 z-10"
-        style={{ width: `${rulerWidth}px`, height: `${height}px` }}
-      >
-        <svg width={rulerWidth} height={height} className="absolute">
-          {ticksY.map((tick) => {
-            const screenY = tick.pos * scale + offsetY;
-            return (
-              <g key={tick.pos}>
-                <line
-                  x1={0}
-                  y1={screenY}
-                  x2={rulerWidth}
-                  y2={screenY}
-                  stroke="#94a3b8"
-                  strokeWidth={1}
-                />
-                <text
-                  x={2}
-                  y={screenY + 10}
-                  fontSize="10"
-                  fill="#cbd5e1"
-                  className="select-none"
-                  transform={`rotate(-90 ${2} ${screenY + 10})`}
-                >
-                  {tick.label}
-                </text>
-              </g>
-            );
-          })}
-        </svg>
-      </div>
-
-      {/* Corner */}
-      <div
-        className="absolute top-0 left-0 bg-slate-800 border-b border-r border-slate-600 z-20"
-        style={{ width: `${rulerWidth}px`, height: `${rulerHeight}px` }}
+      {/* Horizontal Ruler - transparent */}
+      <canvas
+        ref={hCanvasRef}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: RULER_SIZE,
+          zIndex: 100,
+          pointerEvents: 'none',
+        }}
       />
+
+      {/* Vertical Ruler - transparent */}
+      <canvas
+        ref={vCanvasRef}
+        style={{
+          position: 'absolute',
+          top: RULER_SIZE,
+          left: 0,
+          zIndex: 100,
+          pointerEvents: 'none',
+        }}
+      />
+
+      {/* Corner - transparent */}
+      <div style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: RULER_SIZE,
+        height: RULER_SIZE,
+        zIndex: 101,
+        pointerEvents: 'none',
+      }} />
     </>
   );
 };
-

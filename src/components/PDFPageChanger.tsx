@@ -50,7 +50,7 @@ export const PDFPageChanger: React.FC = () => {
   };
 
   return (
-    <div className="absolute top-16 right-4 bg-slate-800 text-white rounded-lg shadow-lg p-3 z-50 border border-slate-600">
+    <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 bg-slate-800 text-white rounded-lg shadow-lg p-3 z-50 border border-slate-600">
       <div className="flex items-center gap-2">
         <button
           onClick={() => handlePageChange(pdfBackground.currentPage - 1)}

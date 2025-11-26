@@ -7,7 +7,10 @@ import { Stage, Layer as KonvaLayer, Line, Rect, Circle, Arc, Ellipse, Text, Tra
 import Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import { nanoid } from 'nanoid';
-import { useEditorStore, type EditorElement, lineTypeToDash } from '../state/useEditorStore';
+import { useEditorStore, type EditorElement, type WallElement, type DoorElement, type WindowElement, type FurnitureElement, type FloorPlanPage, lineTypeToDash } from '../state/useEditorStore';
+import type { FurnitureSection } from '../types/catalog';
+import { useRealtimeCollaboration } from '../hooks/useRealtimeCollaboration';
+import { usePerformanceTelemetry } from '../hooks/usePerformanceTelemetry';
 import { AutoCADRulers } from './AutoCADRulers';
 import { SelectionWindow } from './SelectionWindow';
 import { SmartGuides } from './SmartGuides';
@@ -18,6 +21,10 @@ import { calculateMeasure, formatMeasureText } from '../utils/measure-tool';
 import { moveElements, rotateElements, offsetElement, trimElement, extendElement, filletElements, chamferElements } from '../tools/modify-tools-complete';
 import { createWallElement } from '../tools/wall-tools';
 import { createDoorElement, createWindowElement, createFurnitureElement } from '../tools/block-tools';
+import { BLOCKS_BY_ID } from '../data/blockCatalog';
+import type { BlockDefinition } from '../data/blockCatalog';
+import { useCatalogStore } from '../state/useCatalogStore';
+import { ContextMenu } from '../components/modern/ContextMenu';
 
 // PDF Background Layer Component
 const PDFBackgroundLayer: React.FC<{
@@ -90,7 +97,123 @@ import { createTextElement } from '../tools/text-tools';
 
 type Pointer = { x: number; y: number };
 
+const radiansToDegrees = (rad: number) => (rad * 180) / Math.PI;
+
+const projectPointOntoSegment = (point: Pointer, start: Pointer, end: Pointer) => {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lenSq = dx * dx + dy * dy || 1;
+  let t = ((point.x - start.x) * dx + (point.y - start.y) * dy) / lenSq;
+  t = Math.max(0, Math.min(1, t));
+  const projection = {
+    x: start.x + t * dx,
+    y: start.y + t * dy,
+  };
+  const distance = Math.hypot(point.x - projection.x, point.y - projection.y);
+  return { point: projection, t, distance };
+};
+
+const getWallAngleDeg = (wall: WallElement) => {
+  if (!wall.points || wall.points.length < 4) return 0;
+  const dx = wall.points[2] - wall.points[0];
+  const dy = wall.points[3] - wall.points[1];
+  return radiansToDegrees(Math.atan2(dy, dx));
+};
+
 // Render furniture element with visual design based on category
+const renderCatalogBlockShapes = (
+  element: FurnitureElement,
+  blockDefinition: BlockDefinition | undefined,
+  groupProps: any,
+  shapeRefs: React.MutableRefObject<Record<string, Konva.Node | null>>,
+) => {
+  if (!blockDefinition) return null;
+  const width = element.width;
+  const height = element.height;
+  const minDim = Math.min(width, height);
+  const baseStroke = element.stroke || '#0f172a';
+  const baseFill = element.fill && element.fill !== 'none' ? element.fill : 'transparent';
+  const detailStroke = '#475569';
+  const detailFill = 'rgba(148,163,184,0.35)';
+
+  const resolveStroke = (token?: string) => {
+    if (!token || token === 'base') return baseStroke;
+    if (token === 'detail') return detailStroke;
+    return token;
+  };
+
+  const resolveFill = (token?: string) => {
+    if (!token || token === 'base') return baseFill;
+    if (token === 'detail') return detailFill;
+    return token;
+  };
+
+  return (
+    <Group
+      key={element.id}
+      id={element.id}
+      ref={(node) => {
+        shapeRefs.current[element.id] = node;
+      }}
+      {...groupProps}
+    >
+      <Rect x={0} y={0} width={width} height={height} fill="transparent" listening={true} />
+      {blockDefinition.planSymbols.map((shape, index) => {
+        if (shape.kind === 'rect') {
+          return (
+            <Rect
+              key={index}
+              x={shape.x * width}
+              y={shape.y * height}
+              width={shape.width * width}
+              height={shape.height * height}
+              cornerRadius={(shape.cornerRadius ?? 0) * minDim}
+              stroke={resolveStroke(shape.stroke)}
+              strokeWidth={(shape.strokeWidth ?? 1) * 1.5}
+              dash={shape.dash?.map((d) => d * minDim)}
+              fill={resolveFill(shape.fill)}
+              listening={false}
+            />
+          );
+        }
+        if (shape.kind === 'line') {
+          return (
+            <Line
+              key={index}
+              points={[
+                shape.points[0] * width,
+                shape.points[1] * height,
+                shape.points[2] * width,
+                shape.points[3] * height,
+              ]}
+              stroke={resolveStroke(shape.stroke)}
+              strokeWidth={(shape.strokeWidth ?? 1) * 1.4}
+              dash={shape.dash?.map((d) => d * minDim)}
+              listening={false}
+            />
+          );
+        }
+        if (shape.kind === 'circle') {
+          return (
+            <Circle
+              key={index}
+              x={shape.x * width}
+              y={shape.y * height}
+              radius={shape.radius * minDim}
+              stroke={resolveStroke(shape.stroke)}
+              strokeWidth={(shape.strokeWidth ?? 1) * 1.3}
+              fill={resolveFill(shape.fill)}
+              dash={shape.dash?.map((d) => d * minDim)}
+              listening={false}
+            />
+          );
+        }
+        return null;
+      })}
+    </Group>
+  );
+};
+
 const renderFurnitureElement = (
   element: EditorElement,
   layer: any,
@@ -103,7 +226,8 @@ const renderFurnitureElement = (
   isSelectingRef?: React.MutableRefObject<boolean>,
   setSelectionWindow?: (window: any) => void,
   selectionStartRef?: React.MutableRefObject<{ x: number; y: number } | null>,
-  stageRef?: React.MutableRefObject<Konva.Stage | null>
+  stageRef?: React.MutableRefObject<Konva.Stage | null>,
+  catalogById?: Record<string, BlockDefinition>
 ) => {
   if (element.type !== 'furniture') return null;
   
@@ -125,6 +249,8 @@ const renderFurnitureElement = (
     x: element.x,
     y: element.y,
     rotation: element.rotation,
+    scaleX: (element as any).scaleX || 1,
+    scaleY: (element as any).scaleY || 1,
     draggable: !layer.locked && tool === 'select',
     onPointerDown: (evt: KonvaEventObject<PointerEvent>) => {
       if (tool === 'select' && !layer.locked) {
@@ -211,6 +337,12 @@ const renderFurnitureElement = (
     dash: elementDash,
     listening: false,
   };
+
+  const blockKey = (element as FurnitureElement).blockId || ((element as any).metadata?.blockId as string | undefined);
+  const blockDefinition = blockKey ? catalogById?.[blockKey] || BLOCKS_BY_ID[blockKey] : undefined;
+  if (blockDefinition) {
+    return renderCatalogBlockShapes(element as FurnitureElement, blockDefinition, groupProps, shapeRefs);
+  }
 
   // Bed - AutoCAD Style (rectangle with headboard and footboard)
   if (category.includes('bed')) {
@@ -349,19 +481,91 @@ const renderFurnitureElement = (
   }
 
   // Cabinet - AutoCAD Style (rectangle with door divisions and handles)
-  if (category.includes('cabinet') || category === 'base-cabinet' || category === 'wall-cabinet') {
+  if (category.includes('cabinet') || category === 'base-cabinet' || category === 'wall-cabinet' || element.moduleClass) {
+    const sections = element.sections && element.sections.length > 0 ? element.sections : null;
+    const finishFill = element.finish?.front || element.fill || 'transparent';
+    const toeKickHeight = element.cabinet?.toeKick ? Math.max(4, height * 0.08) : 0;
+    let cumulativeX = 0;
+
+    const sectionGraphics = sections
+      ? sections.flatMap((section, index) => {
+          const ratio = Math.max(section.widthRatio ?? 1 / sections.length, 0.05);
+          const sectionWidth = width * ratio;
+          const startX = cumulativeX;
+          cumulativeX += sectionWidth;
+          const elementsArray: React.ReactNode[] = [];
+
+          if (index < sections.length - 1) {
+            elementsArray.push(
+              <Line
+                key={`${element.id}-divider-${index}`}
+                points={[startX + sectionWidth, 0, startX + sectionWidth, height]}
+                {...detailProps}
+              />,
+            );
+          }
+
+          if (section.type === 'drawer') {
+            const drawers = Math.max(section.drawerCount ?? 3, 1);
+            for (let i = 1; i < drawers; i++) {
+              elementsArray.push(
+                <Line
+                  key={`${element.id}-drawer-${index}-${i}`}
+                  points={[startX, (height / drawers) * i, startX + sectionWidth, (height / drawers) * i]}
+                  {...detailProps}
+                />,
+              );
+            }
+          }
+
+          if (section.type === 'door') {
+            const handleX = section.swing === 'right' ? startX + sectionWidth * 0.15 : startX + sectionWidth * 0.85;
+            elementsArray.push(
+              <Circle key={`${element.id}-handle-${index}`} x={handleX} y={height / 2} radius={detailSize * 0.3} fill={element.stroke || '#000000'} opacity={element.opacity || 1} listening={false} />,
+            );
+          }
+
+          if (section.type === 'open') {
+            elementsArray.push(
+              <Rect
+                key={`${element.id}-open-${index}`}
+                x={startX + detailSize * 0.3}
+                y={detailSize * 0.3}
+                width={sectionWidth - detailSize * 0.6}
+                height={height - detailSize * 0.6}
+                strokeDash={[6, 4]}
+                {...detailProps}
+              />,
+            );
+          }
+
+          return elementsArray;
+        })
+      : [
+          <Line key={`${element.id}-cabinet-default-1`} points={[width * 0.33, 0, width * 0.33, height]} {...detailProps} />,
+          <Line key={`${element.id}-cabinet-default-2`} points={[width * 0.67, 0, width * 0.67, height]} {...detailProps} />,
+          <Circle key={`${element.id}-cabinet-handle-1`} x={width * 0.15} y={height / 2} radius={detailSize * 0.3} fill="#000000" opacity={element.opacity || 1} listening={false} />,
+          <Circle key={`${element.id}-cabinet-handle-2`} x={width * 0.5} y={height / 2} radius={detailSize * 0.3} fill="#000000" opacity={element.opacity || 1} listening={false} />,
+          <Circle key={`${element.id}-cabinet-handle-3`} x={width * 0.85} y={height / 2} radius={detailSize * 0.3} fill="#000000" opacity={element.opacity || 1} listening={false} />,
+        ];
+
     return (
       <Group key={element.id} id={element.id} ref={(node) => { shapeRefs.current[element.id] = node; }} {...groupProps}>
         {/* Transparent hit area for easy selection */}
         <Rect x={0} y={0} width={width} height={height} fill="transparent" listening={true} />
-        <Rect x={0} y={0} width={width} height={height} {...baseShapeProps} />
-        {/* Door divisions */}
-        <Line points={[width * 0.33, 0, width * 0.33, height]} stroke={element.stroke || '#000000'} strokeWidth={strokeDetail * 1.2} opacity={element.opacity || 1} listening={false} />
-        <Line points={[width * 0.67, 0, width * 0.67, height]} stroke={element.stroke || '#000000'} strokeWidth={strokeDetail * 1.2} opacity={element.opacity || 1} listening={false} />
-        {/* Handles - small circles on each door */}
-        <Circle x={width * 0.15} y={height / 2} radius={detailSize * 0.3} fill="#000000" opacity={element.opacity || 1} listening={false} />
-        <Circle x={width * 0.5} y={height / 2} radius={detailSize * 0.3} fill="#000000" opacity={element.opacity || 1} listening={false} />
-        <Circle x={width * 0.85} y={height / 2} radius={detailSize * 0.3} fill="#000000" opacity={element.opacity || 1} listening={false} />
+        <Rect x={0} y={0} width={width} height={height} {...baseShapeProps} fill={finishFill} />
+        {sectionGraphics}
+        {toeKickHeight > 0 && (
+          <Rect
+            x={0}
+            y={height - toeKickHeight}
+            width={width}
+            height={toeKickHeight}
+            fill={element.finish?.carcass || '#94a3b8'}
+            opacity={(element.opacity || 1) * 0.8}
+            listening={false}
+          />
+        )}
       </Group>
     );
   }
@@ -537,7 +741,6 @@ export const AdvancedCanvas: React.FC = () => {
   const isSelectingRef = useRef<boolean>(false);
   const lastClickTimeRef = useRef<number>(0);
   const lastClickElementRef = useRef<string | null>(null);
-  const rafRef = useRef<number | null>(null);
   const draftUpdateRafRef = useRef<number | null>(null);
   const lastDraftUpdateRef = useRef<{ x: number; y: number } | null>(null);
   const originRef = useRef<Pointer | null>(null);
@@ -571,6 +774,7 @@ export const AdvancedCanvas: React.FC = () => {
   const [editingTextValue, setEditingTextValue] = useState<string>('');
   const textInputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
   const textMeasureRef = useRef<HTMLDivElement | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; elementId?: string } | null>(null);
 
   const {
     tool,
@@ -592,7 +796,28 @@ export const AdvancedCanvas: React.FC = () => {
     removeElement,
     pdfBackground,
     setActiveLayer,
+    // Multi-page floor plan
+    floorPlanPages,
+    currentFloorPlanPageId,
+    autoSaveEnabled,
+    lastAutoSave,
+    addFloorPlanPage,
+    removeFloorPlanPage,
+    setCurrentFloorPlanPage,
+    renameFloorPlanPage,
+    saveCurrentPageElements,
+    setAutoSaveEnabled,
   } = useEditorStore();
+  const catalogById = useCatalogStore((state) => state.byId);
+  const catalogStatus = useCatalogStore((state) => state.status);
+  const loadCatalog = useCatalogStore((state) => state.loadBlocks);
+  useEffect(() => {
+    if (catalogStatus === 'idle') {
+      loadCatalog();
+    }
+  }, [catalogStatus, loadCatalog]);
+  const { presence } = useRealtimeCollaboration('default-session');
+  usePerformanceTelemetry();
 
   // Ensure activeLayerId is set - if not, use first visible layer or create one
   useEffect(() => {
@@ -626,6 +851,23 @@ export const AdvancedCanvas: React.FC = () => {
   useEffect(() => {
     console.log('Canvas size:', canvasSize);
   }, [canvasSize]);
+
+  // Auto-save effect - save current page elements every 5 seconds when enabled
+  useEffect(() => {
+    if (!autoSaveEnabled) return;
+    
+    const autoSaveInterval = setInterval(() => {
+      if (elements.length > 0) {
+        saveCurrentPageElements();
+      }
+    }, 5000); // Auto-save every 5 seconds
+    
+    return () => clearInterval(autoSaveInterval);
+  }, [autoSaveEnabled, elements.length, saveCurrentPageElements]);
+
+  // State for editing page name
+  const [editingPageId, setEditingPageId] = useState<string | null>(null);
+  const [editingPageName, setEditingPageName] = useState('');
 
   // Helper to add PDF page number to elements when PDF is loaded
   const addElementWithPage = useCallback((element: EditorElement) => {
@@ -708,6 +950,64 @@ export const AdvancedCanvas: React.FC = () => {
     }
     return null;
   };
+
+  const alignDoorWindowToWall = useCallback((point: Pointer) => {
+    const walls = elements.filter((el): el is WallElement => el.type === 'wall' && Array.isArray(el.points) && el.points.length >= 4);
+    let bestPoint = point;
+    let bestRotation: number | undefined;
+    let bestWallId: string | undefined;
+    let bestDistance = 60; // px tolerance
+
+    walls.forEach((wall) => {
+      const wallStart = { x: wall.points[0], y: wall.points[1] };
+      const wallEnd = { x: wall.points[2], y: wall.points[3] };
+      const projection = projectPointOntoSegment(point, wallStart, wallEnd);
+      if (projection.distance < bestDistance) {
+        bestDistance = projection.distance;
+        bestPoint = projection.point;
+        bestRotation = getWallAngleDeg(wall);
+        bestWallId = wall.id;
+      }
+    });
+
+    return { point: bestPoint, rotation: bestRotation, wallId: bestWallId };
+  }, [elements]);
+
+  const splitWallAtPoint = useCallback((wall: WallElement, point: Pointer) => {
+    if (!wall.points || wall.points.length < 4) return false;
+    const [x1, y1, x2, y2] = wall.points;
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const lenSq = dx * dx + dy * dy;
+    if (lenSq === 0) return false;
+
+    let t = ((point.x - x1) * dx + (point.y - y1) * dy) / lenSq;
+    t = Math.max(0, Math.min(1, t));
+    if (t <= 0.05 || t >= 0.95) {
+      return false; // avoid extremely small segments
+    }
+
+    const splitPoint = {
+      x: x1 + t * dx,
+      y: y1 + t * dy,
+    };
+
+    const applyWallStyle = (base: WallElement): WallElement => ({
+      ...base,
+      stroke: wall.stroke,
+      strokeWidth: wall.strokeWidth,
+      opacity: wall.opacity,
+      dash: (wall as any).dash !== undefined ? (wall as any).dash : (base as any).dash,
+      fill: (wall as any).fill !== undefined ? (wall as any).fill : (base as any).fill,
+    });
+
+    removeElement(wall.id);
+    const firstWall = createWallElement({ x: x1, y: y1 }, splitPoint, wall.thickness || 20, wall.layerId);
+    const secondWall = createWallElement(splitPoint, { x: x2, y: y2 }, wall.thickness || 20, wall.layerId);
+    addElementWithPage(applyWallStyle(firstWall));
+    addElementWithPage(applyWallStyle(secondWall));
+    return true;
+  }, [addElementWithPage, removeElement]);
 
   // Split line at intersection points with eraser path
   const splitLineAtIntersections = useCallback((
@@ -962,13 +1262,22 @@ export const AdvancedCanvas: React.FC = () => {
             setEditingTextId(selectedElement.id);
             setEditingTextValue(textElement.text || '');
           }
+        } else if ((e.key === 's' || e.key === 'S') && selectedElementIds.length === 1) {
+          const selectedElement = elements.find(el => el.id === selectedElementIds[0]);
+          if (selectedElement && selectedElement.type === 'wall' && pointer) {
+            e.preventDefault();
+            const success = splitWallAtPoint(selectedElement as WallElement, pointer);
+            if (success) {
+              setSelectedElements([]);
+            }
+          }
         }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [editingTextId, editingTextValue, selectedElementIds, elements, updateElement, removeElement, setSelectedElements, tool, isDrawing, draftElement]);
+  }, [editingTextId, editingTextValue, selectedElementIds, elements, updateElement, removeElement, setSelectedElements, tool, isDrawing, draftElement, splitWallAtPoint, pointer]);
 
   // Focus text input when editing starts
   useEffect(() => {
@@ -996,31 +1305,30 @@ export const AdvancedCanvas: React.FC = () => {
     transformerRef.current.getLayer()?.batchDraw();
   }, [selectedElementIds, elements]);
 
-  // Resize handler
+  // Resize handler - uses ResizeObserver to detect container size changes
   useEffect(() => {
     const updateSize = () => {
       if (containerRef.current) {
         const rect = containerRef.current.getBoundingClientRect();
         const width = rect.width || window.innerWidth;
         const height = rect.height || window.innerHeight;
-        console.log('Canvas size updated:', { width, height, rectWidth: rect.width, rectHeight: rect.height });
         setCanvasSize({ width, height });
-      } else {
-        // Fallback if container not ready
-        const fallbackWidth = window.innerWidth;
-        const fallbackHeight = window.innerHeight;
-        console.log('Canvas size fallback:', { width: fallbackWidth, height: fallbackHeight });
-        setCanvasSize({ width: fallbackWidth, height: fallbackHeight });
       }
     };
     updateSize();
-    // Use setTimeout to ensure DOM is ready
-    const timeoutId = setTimeout(updateSize, 100);
-    const timeoutId2 = setTimeout(updateSize, 500); // Additional delay for slow renders
+    
+    // ResizeObserver to detect when panels are hidden/shown
+    const resizeObserver = new ResizeObserver(() => {
+      updateSize();
+    });
+    
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+    
     window.addEventListener('resize', updateSize);
     return () => {
-      clearTimeout(timeoutId);
-      clearTimeout(timeoutId2);
+      resizeObserver.disconnect();
       window.removeEventListener('resize', updateSize);
     };
   }, []);
@@ -1392,13 +1700,14 @@ export const AdvancedCanvas: React.FC = () => {
     }
 
     if (tool === 'door') {
-      originRef.current = point;
+      const alignment = alignDoorWindowToWall(point);
+      originRef.current = alignment.point;
       setDraftElement({
         id: 'door-preview',
         type: 'door',
         layerId: activeLayerId,
-        x: point.x,
-        y: point.y,
+        x: alignment.point.x,
+        y: alignment.point.y,
         width: 80, // Default door width
         height: 5,
         swingAngle: 90,
@@ -1406,7 +1715,8 @@ export const AdvancedCanvas: React.FC = () => {
         strokeWidth: drawingSettings.strokeWidth || 1.5,
         opacity: drawingSettings.opacity !== undefined ? drawingSettings.opacity : 1,
         fill: (drawingSettings.fillColor && drawingSettings.fillColor.trim()) ? drawingSettings.fillColor : 'transparent',
-        rotation: 0,
+        rotation: alignment.rotation ?? 0,
+        wallId: alignment.wallId,
         dash: drawingSettings.lineType ? lineTypeToDash(drawingSettings.lineType) : [],
       } as EditorElement);
       setIsDrawing(true);
@@ -1414,20 +1724,22 @@ export const AdvancedCanvas: React.FC = () => {
     }
 
     if (tool === 'window') {
-      originRef.current = point;
+      const alignment = alignDoorWindowToWall(point);
+      originRef.current = alignment.point;
       setDraftElement({
         id: 'window-preview',
         type: 'window',
         layerId: activeLayerId,
-        x: point.x,
-        y: point.y,
+        x: alignment.point.x,
+        y: alignment.point.y,
         width: 0, // Start with 0 for smooth dynamic drawing
         height: 8, // Default window height (thicker for visibility)
         stroke: (drawingSettings.strokeColor && drawingSettings.strokeColor.trim()) ? drawingSettings.strokeColor : '#000000',
         strokeWidth: drawingSettings.strokeWidth || 1.5,
         opacity: drawingSettings.opacity !== undefined ? drawingSettings.opacity : 1,
         fill: (drawingSettings.fillColor && drawingSettings.fillColor.trim()) ? drawingSettings.fillColor : 'transparent',
-        rotation: 0,
+        rotation: alignment.rotation ?? 0,
+        wallId: alignment.wallId,
         dash: drawingSettings.lineType ? lineTypeToDash(drawingSettings.lineType) : [],
       } as EditorElement);
       setIsDrawing(true);
@@ -1440,7 +1752,7 @@ export const AdvancedCanvas: React.FC = () => {
     // Update pointer with snapping
     let finalPoint = point;
     if (snappingEngineRef.current) {
-      const snap = snappingEngineRef.current.findSnapPoint(point);
+      const snap = snappingEngineRef.current.findSnapPoint(point, undefined, originRef.current ?? undefined);
       finalPoint = snap ? { x: snap.x, y: snap.y } : point;
       setPointer(finalPoint);
       setSnapPoint(snap ? { x: snap.x, y: snap.y } : null);
@@ -1449,7 +1761,18 @@ export const AdvancedCanvas: React.FC = () => {
     }
 
     // Furniture/Block tools - create furniture elements on click
-    const furnitureTools: Record<string, { width: number; height: number; category: string }> = {
+    const furnitureTools: Record<
+      string,
+      {
+        width: number;
+        height: number;
+        category: string;
+        moduleClass?: FurnitureElement['moduleClass'];
+        depth?: number;
+        sections?: FurnitureSection[];
+        metadata?: Record<string, unknown>;
+      }
+    > = {
       bed: { width: 200, height: 150, category: 'bed' },
       sofa: { width: 200, height: 80, category: 'sofa' },
       table: { width: 120, height: 80, category: 'table' },
@@ -1461,10 +1784,48 @@ export const AdvancedCanvas: React.FC = () => {
       showerPanel: { width: 80, height: 80, category: 'shower' },
       floorDrain: { width: 30, height: 30, category: 'floor-drain' },
       mirror: { width: 60, height: 80, category: 'mirror' },
-      baseCabinet: { width: 60, height: 35, category: 'base-cabinet' },
-      wallCabinet: { width: 60, height: 35, category: 'wall-cabinet' },
-      sinkUnit: { width: 80, height: 60, category: 'sink-unit' },
-      hobUnit: { width: 80, height: 60, category: 'hob-unit' },
+      baseCabinet: {
+        width: 60,
+        height: 35,
+        depth: 60,
+        category: 'base-cabinet',
+        moduleClass: 'base',
+        sections: [
+          { id: 'left', type: 'door', widthRatio: 0.5, swing: 'left' },
+          { id: 'right', type: 'door', widthRatio: 0.5, swing: 'right' },
+        ],
+        metadata: { layout: 'double-door' },
+      },
+      wallCabinet: {
+        width: 60,
+        height: 35,
+        depth: 35,
+        category: 'wall-cabinet',
+        moduleClass: 'wall',
+        sections: [{ id: 'open', type: 'open' }],
+        metadata: { layout: 'open' },
+      },
+      sinkUnit: {
+        width: 80,
+        height: 60,
+        depth: 60,
+        category: 'sink-unit',
+        moduleClass: 'base',
+        sections: [
+          { id: 'door', type: 'door', widthRatio: 0.6, swing: 'left' },
+          { id: 'drawer', type: 'drawer', widthRatio: 0.4, drawerCount: 2 },
+        ],
+        metadata: { layout: 'door-drawer' },
+      },
+      hobUnit: {
+        width: 80,
+        height: 60,
+        depth: 60,
+        category: 'hob-unit',
+        moduleClass: 'base',
+        sections: [{ id: 'drawers', type: 'drawer', drawerCount: 3 }],
+        metadata: { layout: 'drawer-stack' },
+      },
       refrigerator: { width: 70, height: 180, category: 'refrigerator' },
       microwave: { width: 50, height: 40, category: 'microwave' },
       switchboard: { width: 40, height: 60, category: 'switchboard' },
@@ -1484,7 +1845,13 @@ export const AdvancedCanvas: React.FC = () => {
         config.width,
         config.height,
         config.category,
-        activeLayerId
+        activeLayerId,
+        {
+          moduleClass: config.moduleClass,
+          depth: config.depth,
+          sections: config.sections,
+          metadata: config.metadata,
+        }
       );
       // Apply drawing settings to furniture element
       const furnitureWithSettings = {
@@ -1557,6 +1924,7 @@ export const AdvancedCanvas: React.FC = () => {
         endPoint: finalPoint,
         value: 0,
         dash: drawingSettings.lineType ? lineTypeToDash(drawingSettings.lineType) : [],
+        style: drawingSettings.dimensionStyle,
       } as any);
       originRef.current = finalPoint;
       setIsDrawing(true);
@@ -1707,7 +2075,7 @@ export const AdvancedCanvas: React.FC = () => {
       setIsDrawing(true);
       return;
     }
-  }, [tool, activeLayerId, drawingSettings, elements, selectedElementIds, measureStart, isMoving, isRotating, modifyTarget, layers, stageScale, stagePosition]);
+  }, [tool, activeLayerId, drawingSettings, elements, selectedElementIds, measureStart, isMoving, isRotating, modifyTarget, layers, stageScale, stagePosition, alignDoorWindowToWall]);
 
   const handlePointerMove = useCallback((e: KonvaEventObject<PointerEvent>) => {
     const stage = stageRef.current;
@@ -1721,20 +2089,14 @@ export const AdvancedCanvas: React.FC = () => {
     const point = getStagePointer(e);
     if (!point) return;
 
-    // Update pointer with snapping
+    // Update pointer with snapping - skip snapping for freehand/eraser for smoothness
     let finalPoint = point;
-    if (snappingEngineRef.current) {
-      const snap = snappingEngineRef.current.findSnapPoint(point);
+    if (snappingEngineRef.current && tool !== 'pencil' && tool !== 'erase') {
+      const snap = snappingEngineRef.current.findSnapPoint(point, undefined, originRef.current ?? undefined);
       finalPoint = snap ? { x: snap.x, y: snap.y } : point;
-      
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      rafRef.current = requestAnimationFrame(() => {
-        setPointer(finalPoint);
-        setSnapPoint(snap ? { x: snap.x, y: snap.y } : null);
-      });
-    } else {
-      setPointer(finalPoint);
+      setSnapPoint(snap ? { x: snap.x, y: snap.y } : null);
     }
+    setPointer(finalPoint);
 
     // Update selection window for select tool
     if (tool === 'select' && isSelectingRef.current && selectionStartRef.current) {
@@ -1849,75 +2211,60 @@ export const AdvancedCanvas: React.FC = () => {
 
     if (!draftElement || !isDrawing) return;
 
-    // Throttle draft element updates using requestAnimationFrame for smooth performance
+    // Freehand drawing - update immediately without RAF for smoothness
+    if (draftElement.type === 'free' && 'points' in draftElement) {
+      setDraftElement((prev) => {
+        if (!prev || prev.type !== 'free' || !('points' in prev)) return prev;
+        const freeElement = prev as any;
+        return {
+          ...prev,
+          points: appendPoint(freeElement.points, finalPoint, 0.5),
+        } as EditorElement;
+      });
+      return;
+    }
+
+    // Wall, door, window - update immediately for smooth drawing
+    if (draftElement.type === 'wall' && originRef.current && 'points' in draftElement) {
+      const origin = originRef.current;
+      setDraftElement((prev) => {
+        if (!prev || prev.type !== 'wall' || !('points' in prev) || !origin) return prev;
+        return { ...prev, points: [origin.x, origin.y, finalPoint.x, finalPoint.y] } as EditorElement;
+      });
+      return;
+    }
+
+    if (draftElement.type === 'door' && originRef.current) {
+      const origin = originRef.current;
+      const dx = finalPoint.x - origin.x;
+      const dy = finalPoint.y - origin.y;
+      const width = Math.hypot(dx, dy);
+      const angle = radiansToDegrees(Math.atan2(dy, dx));
+      setDraftElement((prev) => {
+        if (!prev) return prev;
+        return { ...prev, width: Math.max(40, width), rotation: angle };
+      });
+      return;
+    }
+
+    if (draftElement.type === 'window' && originRef.current) {
+      const origin = originRef.current;
+      const dx = finalPoint.x - origin.x;
+      const dy = finalPoint.y - origin.y;
+      const width = Math.hypot(dx, dy);
+      const angle = radiansToDegrees(Math.atan2(dy, dx));
+      setDraftElement((prev) => {
+        if (!prev) return prev;
+        return { ...prev, width: Math.max(10, width), rotation: angle };
+      });
+      return;
+    }
+
+    // Throttle other draft element updates using requestAnimationFrame
     if (draftUpdateRafRef.current) cancelAnimationFrame(draftUpdateRafRef.current);
     
-    // Capture pointer type for adaptive threshold
-    const pointerType = e.evt?.pointerType || 'mouse';
-    
     draftUpdateRafRef.current = requestAnimationFrame(() => {
-      // Check minimum movement threshold for smoother updates (especially on touch)
-      const lastUpdate = lastDraftUpdateRef.current;
-      if (lastUpdate) {
-        const dist = Math.hypot(finalPoint.x - lastUpdate.x, finalPoint.y - lastUpdate.y);
-        // Adaptive threshold: smaller for mouse (1px), larger for touch (3px) to reduce jitter
-        const threshold = pointerType === 'touch' ? 3 : 1;
-        if (dist < threshold && (draftElement.type === 'door' || draftElement.type === 'window' || draftElement.type === 'wall')) {
-          return;
-        }
-      }
-      lastDraftUpdateRef.current = { x: finalPoint.x, y: finalPoint.y };
-
-      if (draftElement.type === 'free' && 'points' in draftElement) {
-        setDraftElement((prev) => {
-          if (!prev || prev.type !== 'free' || !('points' in prev)) return prev;
-          const freeElement = prev as any;
-          return {
-            ...prev,
-            points: appendPoint(freeElement.points, finalPoint, 0.3), // Reduced threshold for smoother lines
-          } as EditorElement;
-        });
-      } else if (draftElement.type === 'wall' && originRef.current && 'points' in draftElement) {
-        const origin = originRef.current; // Capture value before setState
-        setDraftElement((prev) => {
-          if (!prev || prev.type !== 'wall' || !('points' in prev) || !origin) return prev;
-          return {
-            ...prev,
-            points: [origin.x, origin.y, finalPoint.x, finalPoint.y],
-          } as EditorElement;
-        });
-      } else if (draftElement.type === 'door' && originRef.current) {
-        const origin = originRef.current;
-        const dx = finalPoint.x - origin.x;
-        const dy = finalPoint.y - origin.y;
-        const width = Math.hypot(dx, dy);
-        // Smooth angle calculation with better precision
-        const angle = Math.atan2(dy, dx) * (180 / Math.PI);
-        setDraftElement((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            width: Math.max(40, width), // Allow any width above minimum for smooth drawing
-            rotation: angle,
-          };
-        });
-      } else if (draftElement.type === 'window' && originRef.current) {
-        const origin = originRef.current;
-        const dx = finalPoint.x - origin.x;
-        const dy = finalPoint.y - origin.y;
-        const width = Math.hypot(dx, dy);
-        // Smooth angle calculation with better precision
-        const angle = Math.atan2(dy, dx) * (180 / Math.PI);
-        setDraftElement((prev) => {
-          if (!prev) return prev;
-          // Allow any width above 10px for very smooth drawing, no upper limit during drawing
-          return {
-            ...prev,
-            width: Math.max(10, width), // Very low minimum for smooth drawing
-            rotation: angle,
-          };
-        });
-      } else if (draftElement.type === 'line' && originRef.current) {
+      if (draftElement.type === 'line' && originRef.current) {
         const origin = originRef.current; // Capture value before setState
         setDraftElement((prev) => {
           if (!prev || !origin) return prev;
@@ -1992,7 +2339,7 @@ export const AdvancedCanvas: React.FC = () => {
         });
       }
     });
-  }, [tool, isDrawing, draftElement, activeLayerId, drawingSettings, isMoving, isRotating, rotateCenter, selectedElementIds, elements, measureStart, pointer]);
+  }, [tool, isDrawing, draftElement, activeLayerId, drawingSettings, isMoving, isRotating, rotateCenter, selectedElementIds, elements, measureStart, pointer, alignDoorWindowToWall]);
 
   const handlePointerUp = useCallback(() => {
     // Cancel any pending draft updates for smooth cleanup
@@ -2228,6 +2575,8 @@ export const AdvancedCanvas: React.FC = () => {
           text: `${(distance * drawingSettings.unitScale).toFixed(2)} ${drawingSettings.unit}`,
           x: start.x,
           y: start.y,
+          fill: drawingSettings.fillColor || '#000000',
+          style: drawingSettings.dimensionStyle,
         } as any);
       }
       setDraftElement(null);
@@ -2290,15 +2639,16 @@ export const AdvancedCanvas: React.FC = () => {
     }
 
     if (draftElement.type === 'door') {
-      // Clamp width to reasonable range when finalizing
-      const finalWidth = Math.max(60, Math.min(120, draftElement.width));
+      const doorPreview = draftElement as DoorElement;
+      const finalWidth = Math.max(60, doorPreview.width);
       if (finalWidth > 10) {
         const door = createDoorElement(
-          { x: draftElement.x, y: draftElement.y },
+          { x: doorPreview.x, y: doorPreview.y },
           finalWidth,
-          draftElement.height || 5,
-          draftElement.swingAngle || 90,
-          activeLayerId
+          doorPreview.height || 5,
+          doorPreview.swingAngle || 90,
+          activeLayerId,
+          doorPreview.wallId
         );
         // Apply drawing settings to door
         const doorWithSettings = {
@@ -2319,14 +2669,15 @@ export const AdvancedCanvas: React.FC = () => {
     }
 
     if (draftElement.type === 'window') {
-      // Allow any width above minimum when finalizing (more flexible)
-      const finalWidth = Math.max(30, draftElement.width); // Lower minimum for user flexibility
+      const windowPreview = draftElement as WindowElement;
+      const finalWidth = Math.max(30, windowPreview.width);
       if (finalWidth > 10) {
         const window = createWindowElement(
-          { x: draftElement.x, y: draftElement.y },
+          { x: windowPreview.x, y: windowPreview.y },
           finalWidth,
-          draftElement.height || 8, // Use dynamic height
-          activeLayerId
+          windowPreview.height || 8,
+          activeLayerId,
+          windowPreview.wallId
         );
         // Apply drawing settings to window
         const windowWithSettings = {
@@ -2386,11 +2737,12 @@ export const AdvancedCanvas: React.FC = () => {
       if (!data) return;
 
       const blockTemplate = JSON.parse(data) as {
+        blockId?: string;
         id?: string;
         name?: string;
         category?: string;
-        width: number;
-        height: number;
+        width?: number;
+        height?: number;
         type?: string;
       };
 
@@ -2406,57 +2758,21 @@ export const AdvancedCanvas: React.FC = () => {
       const transform = stage.getAbsoluteTransform().copy().invert();
       const stagePoint = transform.point({ x: screenX, y: screenY });
 
-      // Determine if this is from AutoCADBlocksPanel (mm units) or ElementLibrary (canvas units)
-      // AutoCADBlocksPanel uses mm (typically 600-2400), ElementLibrary uses canvas units (typically 30-200)
-      const isFromBlocksPanel = blockTemplate.width > 100; // Blocks panel uses mm, typically > 100
-      
-      // Convert mm to canvas units if needed (1 canvas unit ≈ 10mm based on existing furniture tools)
-      const canvasWidth = isFromBlocksPanel ? blockTemplate.width / 10 : blockTemplate.width;
-      const canvasHeight = isFromBlocksPanel ? blockTemplate.height / 10 : blockTemplate.height;
+      let catalogBlock: BlockDefinition | undefined;
+      if (blockTemplate.blockId) {
+        catalogBlock = catalogById[blockTemplate.blockId] || BLOCKS_BY_ID[blockTemplate.blockId];
+      } else if (blockTemplate.id) {
+        catalogBlock = catalogById[blockTemplate.id] || BLOCKS_BY_ID[blockTemplate.id];
+      }
 
-      // Use id as category if available, otherwise use category field
-      // Map block IDs to furniture categories
-      const categoryMap: Record<string, string> = {
-        'base-cabinet': 'base-cabinet',
-        'wall-cabinet': 'wall-cabinet',
-        'sink-unit': 'sink-unit',
-        'hob-unit': 'hob-unit',
-        'refrigerator': 'refrigerator',
-        'microwave': 'microwave',
-        'wc': 'wc',
-        'wash-basin': 'wash-basin',
-        'shower-panel': 'shower-panel',
-        'floor-drain': 'floor-drain',
-        'bed-single': 'bed',
-        'bed-double': 'bed',
-        'sofa-2': 'sofa',
-        'sofa-3': 'sofa',
-        'table-round': 'table',
-        'table-rect': 'table',
-        'wardrobe': 'wardrobe',
-        'tv-unit': 'tv-unit',
-        'switchboard': 'switchboard',
-        'power-socket': 'power-socket',
-        'light-point': 'light-point',
-        'fan-point': 'fan-point',
-        'ac-point': 'ac-point',
-        'water-line': 'hot-water-line',
-        'drain-pipe': 'drain-pipe',
-        // ElementLibrary categories
-        'kitchen-sink': 'sink-unit',
-        'kitchen-stove': 'hob-unit',
-        'kitchen-fridge': 'refrigerator',
-        'kitchen-dishwasher': 'base-cabinet',
-        'kitchen-cabinet': 'base-cabinet',
-        'bathroom-toilet': 'wc',
-        'bathroom-sink': 'wash-basin',
-        'bathroom-tub': 'shower-panel',
-        'bathroom-shower': 'shower-panel',
-      };
+      const baseWidth = catalogBlock ? catalogBlock.width : blockTemplate.width || 100;
+      const baseHeight = catalogBlock ? catalogBlock.height : blockTemplate.height || 100;
 
-      const furnitureCategory = blockTemplate.id 
-        ? (categoryMap[blockTemplate.id] || blockTemplate.id)
-        : (blockTemplate.category || 'furniture');
+      const isFromBlocksPanel = Boolean(catalogBlock) || baseWidth > 100;
+      const canvasWidth = isFromBlocksPanel ? baseWidth / 10 : baseWidth;
+      const canvasHeight = isFromBlocksPanel ? baseHeight / 10 : baseHeight;
+
+      const furnitureCategory = catalogBlock?.category || blockTemplate.category || 'furniture';
 
       // Create furniture element
       const furniture = createFurnitureElement(
@@ -2464,7 +2780,19 @@ export const AdvancedCanvas: React.FC = () => {
         canvasWidth,
         canvasHeight,
         furnitureCategory,
-        activeLayerId
+        activeLayerId,
+        catalogBlock
+          ? {
+              blockId: catalogBlock.id,
+              blockName: catalogBlock.name,
+              manufacturer: catalogBlock.manufacturer,
+              sku: catalogBlock.sku,
+              tags: catalogBlock.tags,
+              moduleClass: catalogBlock.moduleClass,
+              depth: catalogBlock.depth ? catalogBlock.depth / 10 : undefined,
+              metadata: { description: catalogBlock.description, blockId: catalogBlock.id },
+            }
+          : undefined,
       );
       // Apply drawing settings to furniture element
       const furnitureWithSettings = {
@@ -2473,12 +2801,14 @@ export const AdvancedCanvas: React.FC = () => {
         strokeWidth: drawingSettings.strokeWidth || furniture.strokeWidth || 1.5,
         opacity: drawingSettings.opacity !== undefined ? drawingSettings.opacity : (furniture.opacity || 1),
         fill: (drawingSettings.fillColor && drawingSettings.fillColor.trim()) ? drawingSettings.fillColor : (furniture.fill || 'transparent'),
+        // Assign PDF page number if PDF is loaded
+        pdfPageNumber: pdfBackground && pdfBackground.visible ? pdfBackground.currentPage : undefined,
       };
       addElement(furnitureWithSettings);
     } catch (error) {
       console.error('Error handling drop:', error);
     }
-  }, [activeLayerId, addElement, drawingSettings]);
+  }, [activeLayerId, addElement, catalogById, drawingSettings]);
 
   return (
     <div 
@@ -2487,7 +2817,87 @@ export const AdvancedCanvas: React.FC = () => {
       onDragOver={handleDragOver}
       onDragEnter={handleDragEnter}
       onDrop={handleDrop}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        // Show context menu at click position
+        if (selectedElementIds.length > 0) {
+          setContextMenu({ x: e.clientX, y: e.clientY, elementId: selectedElementIds[0] });
+        }
+      }}
     >
+      {/* Zoom Controls */}
+      <div className="absolute top-4 right-4 z-50 flex flex-col gap-1 bg-slate-800/90 backdrop-blur rounded-lg p-1 shadow-lg">
+        <button
+          onClick={() => setStageTransform({ scale: Math.min(4, stageScale * 1.25), position: stagePosition })}
+          className="w-8 h-8 flex items-center justify-center text-white hover:bg-slate-700 rounded transition-colors"
+          title="Zoom In"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
+          </svg>
+        </button>
+        <button
+          onClick={() => setStageTransform({ scale: Math.max(0.1, stageScale * 0.8), position: stagePosition })}
+          className="w-8 h-8 flex items-center justify-center text-white hover:bg-slate-700 rounded transition-colors"
+          title="Zoom Out"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/>
+          </svg>
+        </button>
+        <div className="w-full h-px bg-slate-600 my-0.5" />
+        <button
+          onClick={() => setStageTransform({ scale: 1, position: { x: 0, y: 0 } })}
+          className="w-8 h-8 flex items-center justify-center text-cyan-400 hover:bg-slate-700 rounded transition-colors text-xs font-bold"
+          title="Reset Zoom (Fit to Window)"
+        >
+          1:1
+        </button>
+        <button
+          onClick={() => {
+            // Fit all elements to window
+            if (elements.length === 0) {
+              setStageTransform({ scale: 1, position: { x: canvasSize.width / 2, y: canvasSize.height / 2 } });
+              return;
+            }
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            elements.forEach(el => {
+              const x = (el as any).x || 0;
+              const y = (el as any).y || 0;
+              const w = (el as any).width || (el as any).length || 100;
+              const h = (el as any).height || (el as any).thickness || 100;
+              minX = Math.min(minX, x);
+              minY = Math.min(minY, y);
+              maxX = Math.max(maxX, x + w);
+              maxY = Math.max(maxY, y + h);
+            });
+            const contentWidth = maxX - minX + 100;
+            const contentHeight = maxY - minY + 100;
+            const scaleX = canvasSize.width / contentWidth;
+            const scaleY = canvasSize.height / contentHeight;
+            const newScale = Math.min(scaleX, scaleY, 2) * 0.9;
+            const centerX = (minX + maxX) / 2;
+            const centerY = (minY + maxY) / 2;
+            setStageTransform({
+              scale: newScale,
+              position: {
+                x: canvasSize.width / 2 - centerX * newScale,
+                y: canvasSize.height / 2 - centerY * newScale,
+              }
+            });
+          }}
+          className="w-8 h-8 flex items-center justify-center text-emerald-400 hover:bg-slate-700 rounded transition-colors"
+          title="Fit All to Window"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/>
+          </svg>
+        </button>
+        <div className="text-[10px] text-slate-400 text-center px-1">
+          {Math.round(stageScale * 100)}%
+        </div>
+      </div>
+
       {/* Rulers */}
       {snapSettings.showGrid && (
         <AutoCADRulers
@@ -2503,8 +2913,15 @@ export const AdvancedCanvas: React.FC = () => {
       {/* Canvas */}
       <Stage
         ref={(node) => {
-          stageRef.current = node;
-          setStageInstance(node);
+          if (node && stageRef.current !== node) {
+            stageRef.current = node;
+            setStageInstance(node);
+            // Also set as floor plan stage for Layout export (only if changed)
+            const currentFloorPlanStage = useEditorStore.getState().floorPlanStage;
+            if (currentFloorPlanStage !== node) {
+              useEditorStore.getState().setFloorPlanStage(node);
+            }
+          }
         }}
         width={Math.max(canvasSize.width, 100)}
         height={Math.max(canvasSize.height, 100)}
@@ -2538,6 +2955,8 @@ export const AdvancedCanvas: React.FC = () => {
                 text: `${(distance * drawingSettings.unitScale).toFixed(2)} ${drawingSettings.unit}`,
                 x: start.x,
                 y: start.y,
+                fill: drawingSettings.fillColor || '#000000',
+                style: drawingSettings.dimensionStyle,
               } as any);
             }
             setDraftElement(null);
@@ -2621,6 +3040,7 @@ export const AdvancedCanvas: React.FC = () => {
               })
               .map((element) => {
                 if (element.type === 'line') {
+                  const safePoints = (element.points || []).map(p => isNaN(p) ? 0 : p);
                   return (
                     <Line
                       key={element.id}
@@ -2628,7 +3048,12 @@ export const AdvancedCanvas: React.FC = () => {
                       ref={(node) => {
                         shapeRefs.current[element.id] = node;
                       }}
-                      points={element.points}
+                      points={safePoints}
+                      x={element.x || 0}
+                      y={element.y || 0}
+                      rotation={(element as any).rotation || 0}
+                      scaleX={(element as any).scaleX || 1}
+                      scaleY={(element as any).scaleY || 1}
                       stroke={element.stroke}
                       strokeWidth={element.strokeWidth}
                       opacity={element.opacity}
@@ -2706,6 +3131,7 @@ export const AdvancedCanvas: React.FC = () => {
                   );
                 }
                 if (element.type === 'polyline') {
+                  const safePoints = (element.points || []).map(p => isNaN(p) ? 0 : p);
                   return (
                     <Line
                       key={element.id}
@@ -2713,7 +3139,12 @@ export const AdvancedCanvas: React.FC = () => {
                       ref={(node) => {
                         shapeRefs.current[element.id] = node;
                       }}
-                      points={element.points}
+                      points={safePoints}
+                      x={element.x || 0}
+                      y={element.y || 0}
+                      rotation={(element as any).rotation || 0}
+                      scaleX={(element as any).scaleX || 1}
+                      scaleY={(element as any).scaleY || 1}
                       stroke={element.stroke}
                       strokeWidth={element.strokeWidth}
                       opacity={element.opacity}
@@ -2806,6 +3237,9 @@ export const AdvancedCanvas: React.FC = () => {
                       y={element.y}
                       width={element.width}
                       height={element.height}
+                      rotation={(element as any).rotation || 0}
+                      scaleX={(element as any).scaleX || 1}
+                      scaleY={(element as any).scaleY || 1}
                       fill={(element as any).fill || 'transparent'}
                       stroke={element.stroke || '#000000'}
                       strokeWidth={element.strokeWidth || 1.5}
@@ -2887,6 +3321,7 @@ export const AdvancedCanvas: React.FC = () => {
                             y: node.y(),
                             width: node.width() * node.scaleX(),
                             height: node.height() * node.scaleY(),
+                            rotation: node.rotation(),
                           });
                           node.scaleX(1);
                           node.scaleY(1);
@@ -2911,6 +3346,9 @@ export const AdvancedCanvas: React.FC = () => {
                       x={element.x}
                       y={element.y}
                       radius={element.radius}
+                      rotation={(element as any).rotation || 0}
+                      scaleX={(element as any).scaleX || 1}
+                      scaleY={(element as any).scaleY || 1}
                       fill={(element as any).fill || 'transparent'}
                       stroke={element.stroke || '#000000'}
                       strokeWidth={element.strokeWidth || 1.5}
@@ -2991,6 +3429,7 @@ export const AdvancedCanvas: React.FC = () => {
                             x: node.x(),
                             y: node.y(),
                             radius: node.radius() * node.scaleX(),
+                            rotation: node.rotation(),
                           });
                           node.scaleX(1);
                           node.scaleY(1);
@@ -3016,6 +3455,9 @@ export const AdvancedCanvas: React.FC = () => {
                       y={element.y}
                       radiusX={element.radiusX}
                       radiusY={element.radiusY}
+                      rotation={(element as any).rotation || 0}
+                      scaleX={(element as any).scaleX || 1}
+                      scaleY={(element as any).scaleY || 1}
                       fill={(element as any).fill || 'transparent'}
                       stroke={element.stroke || '#000000'}
                       strokeWidth={element.strokeWidth || 1.5}
@@ -3097,6 +3539,7 @@ export const AdvancedCanvas: React.FC = () => {
                             y: node.y(),
                             radiusX: node.radiusX() * node.scaleX(),
                             radiusY: node.radiusY() * node.scaleY(),
+                            rotation: node.rotation(),
                           });
                           node.scaleX(1);
                           node.scaleY(1);
@@ -3217,6 +3660,7 @@ export const AdvancedCanvas: React.FC = () => {
                   );
                 }
                 if (element.type === 'free') {
+                  const safePoints = (element.points || []).map(p => isNaN(p) ? 0 : p);
                   return (
                     <Line
                       key={element.id}
@@ -3224,7 +3668,7 @@ export const AdvancedCanvas: React.FC = () => {
                       ref={(node) => {
                         shapeRefs.current[element.id] = node;
                       }}
-                      points={element.points}
+                      points={safePoints}
                       stroke={element.stroke}
                       strokeWidth={element.strokeWidth}
                       opacity={element.opacity}
@@ -3342,6 +3786,7 @@ export const AdvancedCanvas: React.FC = () => {
                     setSelectionWindow,
                     selectionStartRef,
                     stageRef,
+                    catalogById,
                   );
                 }
                 if (element.type === 'wall') {
@@ -3384,6 +3829,11 @@ export const AdvancedCanvas: React.FC = () => {
                         }
                       }}
                       listening={tool === 'select' || tool === 'pan' || tool === 'erase'}
+                      onDblClick={() => {
+                        // Double-click wall to open elevation view
+                        useEditorStore.getState().setSelectedWallForElevation(element.id);
+                        useEditorStore.getState().setViewMode('elevation');
+                      }}
                       onDragStart={(evt) => {
                         // Prevent stage from being dragged when dragging wall
                         const stage = stageRef.current;
@@ -3912,6 +4362,7 @@ export const AdvancedCanvas: React.FC = () => {
                   const deltaY = end.y - start.y;
                   const angle = Math.atan2(deltaY, deltaX);
                   const perpAngle = angle + Math.PI / 2;
+                  const dimStyle = dimensionElement.style || drawingSettings.dimensionStyle;
                   
                   // Simple scale calculation - show measurements at regular intervals
                   const scaleValue = totalDistance * drawingSettings.unitScale;
@@ -3926,6 +4377,11 @@ export const AdvancedCanvas: React.FC = () => {
                     }
                     return val.toFixed(2);
                   };
+
+                  const labelText = dimensionElement.text || `${formatValue(scaleValue)} ${drawingSettings.unit}`;
+                  const labelFontSize = dimStyle.fontSize ?? 12;
+                  const labelWidth = Math.max(80, labelText.length * (labelFontSize * 0.7));
+                  const labelHeight = labelFontSize * 1.8;
                   
                   return (
                     <Group
@@ -3968,6 +4424,35 @@ export const AdvancedCanvas: React.FC = () => {
                         dash={(element as any).dash !== undefined ? (element as any).dash : []}
                         listening={false}
                       />
+
+                        {dimStyle.showExtensions && (
+                          <>
+                            <Line
+                              points={[
+                                start.x,
+                                start.y,
+                                start.x + Math.cos(perpAngle) * 12,
+                                start.y + Math.sin(perpAngle) * 12,
+                              ]}
+                              stroke={element.stroke || '#000000'}
+                              strokeWidth={strokeWidth * 0.8}
+                              opacity={element.opacity || 1}
+                              listening={false}
+                            />
+                            <Line
+                              points={[
+                                end.x,
+                                end.y,
+                                end.x + Math.cos(perpAngle) * 12,
+                                end.y + Math.sin(perpAngle) * 12,
+                              ]}
+                              stroke={element.stroke || '#000000'}
+                              strokeWidth={strokeWidth * 0.8}
+                              opacity={element.opacity || 1}
+                              listening={false}
+                            />
+                          </>
+                        )}
                       
                       {/* Simplified scale markers - fewer, cleaner */}
                       {Array.from({ length: numMarkers + 1 }).map((_, i) => {
@@ -3997,21 +4482,38 @@ export const AdvancedCanvas: React.FC = () => {
                         );
                       })}
                       
-                      {/* Show total measurement at midpoint - user friendly */}
-                      <Text
-                        x={(start.x + end.x) / 2 - Math.cos(perpAngle) * (strokeWidth * 10)}
-                        y={(start.y + end.y) / 2 - Math.sin(perpAngle) * (strokeWidth * 10)}
-                        text={`${formatValue(scaleValue)} ${drawingSettings.unit}`}
-                        fontSize={12}
-                        fontFamily="Arial"
-                        fontWeight="bold"
-                        fill="#000000"
-                        opacity={element.opacity || 1}
-                        listening={false}
-                        align="center"
-                        offsetX={0}
-                        offsetY={6}
-                      />
+                        {/* Show total measurement at midpoint - user friendly */}
+                        <Group
+                          x={(start.x + end.x) / 2 - Math.cos(perpAngle) * (strokeWidth * 10)}
+                          y={(start.y + end.y) / 2 - Math.sin(perpAngle) * (strokeWidth * 10)}
+                        >
+                          <Rect
+                            x={-labelWidth / 2}
+                            y={-labelHeight / 2}
+                            width={labelWidth}
+                            height={labelHeight}
+                            fill="#1e293b"
+                            stroke={element.stroke || '#00bcd4'}
+                            strokeWidth={1}
+                            cornerRadius={4}
+                            opacity={element.opacity || 1}
+                            listening={false}
+                          />
+                          <Text
+                            text={labelText}
+                            fontSize={labelFontSize}
+                            fontFamily="Arial"
+                            fontStyle="bold"
+                            fill="#00bcd4"
+                            width={labelWidth}
+                            opacity={element.opacity || 1}
+                            listening={false}
+                            align="center"
+                            verticalAlign="middle"
+                            offsetX={labelWidth / 2}
+                            offsetY={labelFontSize / 2}
+                          />
+                        </Group>
                       
                       {/* Start and end point markers */}
                       <Circle
@@ -4030,6 +4532,34 @@ export const AdvancedCanvas: React.FC = () => {
                         opacity={element.opacity || 1}
                         listening={false}
                       />
+                        {dimStyle.showTicks && (
+                          <>
+                            <Line
+                              points={[
+                                start.x,
+                                start.y,
+                                start.x + Math.cos(perpAngle + Math.PI / 4) * 8,
+                                start.y + Math.sin(perpAngle + Math.PI / 4) * 8,
+                              ]}
+                              stroke={element.stroke || '#000000'}
+                              strokeWidth={strokeWidth * 0.8}
+                              opacity={element.opacity || 1}
+                              listening={false}
+                            />
+                            <Line
+                              points={[
+                                end.x,
+                                end.y,
+                                end.x + Math.cos(perpAngle - Math.PI / 4) * 8,
+                                end.y + Math.sin(perpAngle - Math.PI / 4) * 8,
+                              ]}
+                              stroke={element.stroke || '#000000'}
+                              strokeWidth={strokeWidth * 0.8}
+                              opacity={element.opacity || 1}
+                              listening={false}
+                            />
+                          </>
+                        )}
                     </Group>
                   );
                 }
@@ -4181,6 +4711,8 @@ export const AdvancedCanvas: React.FC = () => {
               // Calculate perpendicular offset
               const perpX = (-dy / len) * (thickness / 2);
               const perpY = (dx / len) * (thickness / 2);
+              const wallAngle = Math.atan2(dy, dx);
+              const perpAngle = wallAngle + Math.PI / 2;
               
               // Create outer polygon (double-line wall effect)
               const outerPoly = [
@@ -4201,6 +4733,22 @@ export const AdvancedCanvas: React.FC = () => {
                 x1 - innerPerpX, y1 - innerPerpY,
               ];
               
+              const dimensionOffset = 25;
+              const labelPoint = {
+                x: (x1 + x2) / 2 + Math.cos(perpAngle) * dimensionOffset,
+                y: (y1 + y2) / 2 + Math.sin(perpAngle) * dimensionOffset,
+              };
+              const wallLength = Math.hypot(x2 - x1, y2 - y1);
+              const convertedLength = wallLength * (drawingSettings.unitScale || 1);
+              const unitLabel = drawingSettings.unit || 'mm';
+              const lengthLabel = `${convertedLength.toFixed(convertedLength >= 100 ? 0 : 1)} ${unitLabel}`;
+              const dimLinePoints = [
+                x1 + Math.cos(perpAngle) * dimensionOffset,
+                y1 + Math.sin(perpAngle) * dimensionOffset,
+                x2 + Math.cos(perpAngle) * dimensionOffset,
+                y2 + Math.sin(perpAngle) * dimensionOffset,
+              ];
+
               return (
                 <>
                   {/* Outer polygon - AutoCAD style with fill support */}
@@ -4239,6 +4787,28 @@ export const AdvancedCanvas: React.FC = () => {
                     dash={[5, 5]}
                     listening={false}
                   />
+                  {/* Temporary dimension display */}
+                  {wallLength > 10 && (
+                    <Group listening={false}>
+                      <Line
+                        points={dimLinePoints}
+                        stroke="#3b82f6"
+                        strokeWidth={1}
+                        dash={[4, 4]}
+                        opacity={0.8}
+                      />
+                      <Text
+                        x={labelPoint.x}
+                        y={labelPoint.y - 12}
+                        text={lengthLabel}
+                        fontSize={12}
+                        fill="#3b82f6"
+                        fontStyle="bold"
+                        align="center"
+                        offsetX={lengthLabel.length * 3}
+                      />
+                    </Group>
+                  )}
                 </>
               );
             })()}
@@ -4364,6 +4934,7 @@ export const AdvancedCanvas: React.FC = () => {
           const totalDistance = Math.hypot(deltaX, deltaY);
           const angle = Math.atan2(deltaY, deltaX);
           const perpAngle = angle + Math.PI / 2;
+          const dimStyle = drawingSettings.dimensionStyle;
           
           const scaleValue = totalDistance * drawingSettings.unitScale;
           const numMarkers = totalDistance > 1 ? Math.max(5, Math.min(20, Math.floor(totalDistance / 30))) : 0;
@@ -4376,6 +4947,11 @@ export const AdvancedCanvas: React.FC = () => {
             }
             return val.toFixed(2);
           };
+
+          const labelText = `${formatValue(scaleValue)} ${drawingSettings.unit}`;
+          const labelFontSize = dimStyle.fontSize ?? 12;
+          const labelWidth = Math.max(80, labelText.length * (labelFontSize * 0.7));
+          const labelHeight = labelFontSize * 1.8;
           
           return (
             <Group name="dimension-preview-group">
@@ -4386,6 +4962,33 @@ export const AdvancedCanvas: React.FC = () => {
                 strokeWidth={strokeWidth}
                 opacity={0.8}
               />
+
+              {dimStyle.showExtensions && (
+                <>
+                  <Line
+                    points={[
+                      dimensionStart.x,
+                      dimensionStart.y,
+                      dimensionStart.x + Math.cos(perpAngle) * 12,
+                      dimensionStart.y + Math.sin(perpAngle) * 12,
+                    ]}
+                    stroke={drawingSettings.strokeColor}
+                    strokeWidth={strokeWidth * 0.8}
+                    opacity={0.6}
+                  />
+                  <Line
+                    points={[
+                      currentEnd.x,
+                      currentEnd.y,
+                      currentEnd.x + Math.cos(perpAngle) * 12,
+                      currentEnd.y + Math.sin(perpAngle) * 12,
+                    ]}
+                    stroke={drawingSettings.strokeColor}
+                    strokeWidth={strokeWidth * 0.8}
+                    opacity={0.6}
+                  />
+                </>
+              )}
               
               {/* Simplified scale markers - fewer, cleaner */}
               {Array.from({ length: numMarkers + 1 }).map((_, i) => {
@@ -4415,20 +5018,35 @@ export const AdvancedCanvas: React.FC = () => {
               
               {/* Total measurement at midpoint - user friendly */}
               {totalDistance > 10 && (
-                <Text
+                <Group
                   x={(dimensionStart.x + currentEnd.x) / 2 - Math.cos(perpAngle) * (strokeWidth * 10)}
                   y={(dimensionStart.y + currentEnd.y) / 2 - Math.sin(perpAngle) * (strokeWidth * 10)}
-                  text={`${formatValue(scaleValue)} ${drawingSettings.unit}`}
-                  fontSize={12}
-                  fontFamily="Arial"
-                  fontWeight="bold"
-                  fill="#000000"
-                  opacity={0.8}
-                  listening={false}
-                  align="center"
-                  offsetX={0}
-                  offsetY={6}
-                />
+                >
+                  <Rect
+                    x={-labelWidth / 2}
+                    y={-labelHeight / 2}
+                    width={labelWidth}
+                    height={labelHeight}
+                    fill="#1e293b"
+                    stroke={drawingSettings.strokeColor || '#00bcd4'}
+                    strokeWidth={1}
+                    cornerRadius={4}
+                    opacity={0.9}
+                  />
+                  <Text
+                    text={labelText}
+                    fontSize={labelFontSize}
+                    fontFamily="Arial"
+                    fontWeight="bold"
+                    fill="#00bcd4"
+                    width={labelWidth}
+                    opacity={1}
+                    align="center"
+                    verticalAlign="middle"
+                    offsetX={labelWidth / 2}
+                    offsetY={labelFontSize / 2}
+                  />
+                </Group>
               )}
               
               {/* End point markers */}
@@ -4504,29 +5122,6 @@ export const AdvancedCanvas: React.FC = () => {
             </Group>
           )}
 
-          {/* Compass/North Arrow Layer */}
-          <Group name="compass-group">
-            {/* North Arrow - AutoCAD style (outline only, no fill) */}
-            <Group x={canvasSize.width - 120} y={80}>
-              {/* Circle - outline only */}
-              <Circle x={0} y={0} radius={40} stroke="#000000" strokeWidth={2} />
-              {/* N arrow */}
-              <Line points={[0, -30, 0, -40]} stroke="#000000" strokeWidth={3} />
-              <Line points={[-5, -35, 0, -40, 5, -35]} stroke="#000000" strokeWidth={2} />
-              {/* S */}
-              <Text x={-4} y={30} text="S" fontSize={12} fill="#000000" align="center" />
-              {/* E */}
-              <Text x={30} y={4} text="E" fontSize={12} fill="#000000" align="center" />
-              {/* W */}
-              <Text x={-38} y={4} text="W" fontSize={12} fill="#000000" align="center" />
-              {/* N */}
-              <Text x={-4} y={-50} text="N" fontSize={14} fill="#000000" fontStyle="bold" align="center" />
-              {/* Center lines */}
-              <Line points={[-35, 0, 35, 0]} stroke="#000000" strokeWidth={1} dash={[3, 3]} />
-              <Line points={[0, -35, 0, 35]} stroke="#000000" strokeWidth={1} dash={[3, 3]} />
-            </Group>
-          </Group>
-
           {/* Smart Guides Layer */}
           <Group name="guides-group">
             <SmartGuides
@@ -4575,8 +5170,36 @@ export const AdvancedCanvas: React.FC = () => {
             />
           </Group>
 
-          {/* Transformer */}
-          {selectedElementIds.length > 0 && (
+          {/* Remote collaborators */}
+          <Group name="collaboration-presence">
+            {presence.map((user) => (
+              <Group key={user.userId}>
+                <Circle
+                  x={user.pointer.x}
+                  y={user.pointer.y}
+                  radius={6}
+                  fill="rgba(59,130,246,0.6)"
+                  stroke="#1d4ed8"
+                  strokeWidth={1}
+                  listening={false}
+                />
+                <Text
+                  x={user.pointer.x + 8}
+                  y={user.pointer.y - 4}
+                  text={user.userId.slice(0, 2).toUpperCase()}
+                  fontSize={10}
+                  fill="#1d4ed8"
+                  listening={false}
+                />
+              </Group>
+            ))}
+          </Group>
+
+        </KonvaLayer>
+
+        {/* Transformer needs pointer events, so keep it on its own interactive layer */}
+        {selectedElementIds.length > 0 && (
+          <KonvaLayer name="transformer-layer">
             <Group name="transformer-group">
               <Transformer
                 ref={transformerRef}
@@ -4591,8 +5214,8 @@ export const AdvancedCanvas: React.FC = () => {
                 }}
               />
             </Group>
-          )}
-        </KonvaLayer>
+          </KonvaLayer>
+        )}
       </Stage>
 
       {/* Inline Text Editor Overlay - Simple and Reliable */}
@@ -4783,6 +5406,125 @@ export const AdvancedCanvas: React.FC = () => {
           </>
         );
       })()}
+      
+      {/* Context Menu */}
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          targetElementId={contextMenu.elementId}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
+
+      {/* Floor Plan Page Tabs - Bottom */}
+      <div className="absolute bottom-0 left-0 right-0 z-50 bg-slate-800/95 backdrop-blur border-t border-slate-700 flex items-center px-2 py-1.5 gap-1">
+        {/* Page Tabs */}
+        <div className="flex items-center gap-1 flex-1 overflow-x-auto">
+          {floorPlanPages.map((page, index) => (
+            <div
+              key={page.id}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-t-lg cursor-pointer transition-all min-w-[80px] ${
+                page.id === currentFloorPlanPageId
+                  ? 'bg-white text-slate-800 font-medium'
+                  : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+              }`}
+              onClick={() => setCurrentFloorPlanPage(page.id)}
+              onDoubleClick={() => {
+                setEditingPageId(page.id);
+                setEditingPageName(page.name);
+              }}
+            >
+              {editingPageId === page.id ? (
+                <input
+                  type="text"
+                  value={editingPageName}
+                  onChange={(e) => setEditingPageName(e.target.value)}
+                  onBlur={() => {
+                    if (editingPageName.trim()) {
+                      renameFloorPlanPage(page.id, editingPageName.trim());
+                    }
+                    setEditingPageId(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      if (editingPageName.trim()) {
+                        renameFloorPlanPage(page.id, editingPageName.trim());
+                      }
+                      setEditingPageId(null);
+                    } else if (e.key === 'Escape') {
+                      setEditingPageId(null);
+                    }
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="w-20 px-1 py-0 text-xs bg-white border border-slate-300 rounded text-slate-800"
+                  autoFocus
+                />
+              ) : (
+                <>
+                  <span className="text-xs truncate">{page.name}</span>
+                  {floorPlanPages.length > 1 && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeFloorPlanPage(page.id);
+                      }}
+                      className="ml-1 w-4 h-4 flex items-center justify-center rounded hover:bg-red-500 hover:text-white transition-colors"
+                      title="Remove Page"
+                    >
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                      </svg>
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          ))}
+          
+          {/* Add Page Button */}
+          <button
+            onClick={() => addFloorPlanPage()}
+            className="flex items-center justify-center w-8 h-8 rounded bg-slate-700 text-slate-300 hover:bg-cyan-600 hover:text-white transition-colors"
+            title="Add New Page"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+          </button>
+        </div>
+
+        {/* Auto-save Controls */}
+        <div className="flex items-center gap-2 ml-4 border-l border-slate-600 pl-4">
+          <button
+            onClick={() => saveCurrentPageElements()}
+            className="flex items-center gap-1 px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-emerald-600 hover:text-white transition-colors text-xs"
+            title="Save Now"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+              <polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+            </svg>
+            Save
+          </button>
+          
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={autoSaveEnabled}
+              onChange={(e) => setAutoSaveEnabled(e.target.checked)}
+              className="w-3 h-3 rounded accent-emerald-500"
+            />
+            <span className="text-xs text-slate-400">AutoSave</span>
+          </label>
+          
+          {lastAutoSave && (
+            <span className="text-[10px] text-slate-500">
+              Saved {new Date(lastAutoSave).toLocaleTimeString()}
+            </span>
+          )}
+        </div>
+      </div>
     </div>
   );
 };

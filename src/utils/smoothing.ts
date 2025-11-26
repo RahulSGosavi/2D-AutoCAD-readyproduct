@@ -70,7 +70,7 @@ const smoothInterpolate = (p1: Point, p2: Point, t: number): Point => {
 export const appendPoint = (
   points: number[],
   next: Point,
-  minDistance = 0.5, // Reduced for smoother lines
+  minDistance = 1,
 ): number[] => {
   if (points.length < 2) {
     return [...points, next.x, next.y];
@@ -83,20 +83,9 @@ export const appendPoint = (
 
   const distance = getDistance(prevPoint, next);
   
+  // Skip if too close
   if (distance < minDistance) {
     return points;
-  }
-
-  // Add smooth interpolation points for better curves
-  if (distance > minDistance * 2 && points.length >= 4) {
-    const prevPrevPoint: Point = {
-      x: points[points.length - 4],
-      y: points[points.length - 3],
-    };
-    
-    // Add intermediate point for smoother curve
-    const midPoint = smoothInterpolate(prevPoint, next, 0.5);
-    return [...points, midPoint.x, midPoint.y, next.x, next.y];
   }
 
   return [...points, next.x, next.y];

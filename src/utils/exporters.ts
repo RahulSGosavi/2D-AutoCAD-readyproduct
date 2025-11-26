@@ -11,12 +11,49 @@ export const exportStageToPNG = async (
   filename = 'floorplan.png',
   minDimension = 3840,
 ) => {
+  // Hide UI layers but keep PDF background visible
+  const gridLayer = stage.findOne('.grid-layer') || stage.getLayers().find(l => l.name() === 'grid-layer');
+  const selectionLayer = stage.findOne('.selection-layer') || stage.getLayers().find(l => l.name() === 'selection-layer');
+  const transformer = stage.findOne('Transformer') || stage.find('Transformer')[0];
+  const compassLayer = stage.findOne('.compass-layer') || stage.getLayers().find(l => l.name() === 'compass-layer');
+  const guidesLayer = stage.findOne('.guides-layer') || stage.getLayers().find(l => l.name() === 'guides-layer');
+  const draftLayer = stage.findOne('.draft-layer') || stage.getLayers().find(l => l.name() === 'draft-layer');
+  
+  // Store visibility states
+  const prevGrid = gridLayer?.visible();
+  const prevSelection = selectionLayer?.visible();
+  const prevTransformer = transformer?.visible();
+  const prevCompass = compassLayer?.visible();
+  const prevGuides = guidesLayer?.visible();
+  const prevDraft = draftLayer?.visible();
+  
+  // Hide UI elements (keep PDF background visible)
+  if (gridLayer) gridLayer.visible(false);
+  if (selectionLayer) selectionLayer.visible(false);
+  if (transformer) transformer.visible(false);
+  if (compassLayer) compassLayer.visible(false);
+  if (guidesLayer) guidesLayer.visible(false);
+  if (draftLayer) draftLayer.visible(false);
+  
+  stage.draw();
+  
   const maxSide = Math.max(stage.width(), stage.height());
   const pixelRatio = clamp(minDimension / maxSide, 1, 8);
   const dataUrl = stage.toDataURL({
     pixelRatio,
     mimeType: 'image/png',
   });
+  
+  // Restore visibility
+  if (gridLayer && prevGrid !== undefined) gridLayer.visible(prevGrid);
+  if (selectionLayer && prevSelection !== undefined) selectionLayer.visible(prevSelection);
+  if (transformer && prevTransformer !== undefined) transformer.visible(prevTransformer);
+  if (compassLayer && prevCompass !== undefined) compassLayer.visible(prevCompass);
+  if (guidesLayer && prevGuides !== undefined) guidesLayer.visible(prevGuides);
+  if (draftLayer && prevDraft !== undefined) draftLayer.visible(prevDraft);
+  
+  stage.draw();
+  
   triggerDownload(dataUrl, filename);
   return dataUrl;
 };
@@ -138,6 +175,7 @@ export const exportPDFWithDrawings = async (
   },
   elements: EditorElement[],
   filename = 'drawing-with-pdf.pdf',
+  exportCurrentPageOnly = false, // New option to export only current page
 ) => {
   // Hide layers that shouldn't be in export (grid, PDF background, rulers, guides, etc.)
   // Find layers by name (both with and without dot prefix)
@@ -224,12 +262,20 @@ export const exportPDFWithDrawings = async (
     compressPdf: true,
   });
 
-  for (let pageNum = 0; pageNum < pdfBackground.pages.length; pageNum++) {
+  // Determine which pages to export
+  const pagesToExport = exportCurrentPageOnly 
+    ? [pdfBackground.currentPage - 1] // Only current page (0-indexed)
+    : Array.from({ length: pdfBackground.pages.length }, (_, i) => i); // All pages
+
+  for (let i = 0; i < pagesToExport.length; i++) {
+    const pageNum = pagesToExport[i];
     const pdfPage = pdfBackground.pages[pageNum];
+    if (!pdfPage) continue;
+    
     const targetPageNumber = pageNum + 1;
     
-    // Add new page (except for first page)
-    if (pageNum > 0) {
+    // Add new page (except for first page in export)
+    if (i > 0) {
       pdf.addPage();
     }
 

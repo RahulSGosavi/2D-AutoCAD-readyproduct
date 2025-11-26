@@ -1,4 +1,5 @@
 // API Service for backend communication
+import type { BlockDefinition } from '../data/blockCatalog';
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 export interface ApiResponse<T> {
@@ -148,6 +149,24 @@ class ApiService {
   async deleteProject(id: string) {
     return this.request<{ message: string }>(`/projects/${id}`, {
       method: 'DELETE',
+    });
+  }
+
+  async createShareToken(payload: Record<string, unknown>) {
+    return this.request<{ token: string }>('/projects/share', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async getCatalogBlocks() {
+    return this.request<{ blocks: BlockDefinition[] }>('/catalog/blocks');
+  }
+
+  async createCatalogBlock(block: BlockDefinition) {
+    return this.request<{ block: BlockDefinition }>('/catalog/blocks', {
+      method: 'POST',
+      body: JSON.stringify(block),
     });
   }
 }

@@ -1,90 +1,129 @@
 // src/components/AutoCADBlocksPanel.tsx
 import React from 'react';
 import { useEditorStore } from '../state/useEditorStore';
-import { nanoid } from 'nanoid';
+import { createFurnitureElement } from '../tools/block-tools';
+import { type BlockDefinition } from '../data/blockCatalog';
+import { useCatalogStore } from '../state/useCatalogStore';
 
-interface BlockTemplate {
-  id: string;
-  name: string;
-  category: string;
-  icon: string;
-  width: number;
-  height: number;
-  type: string;
-}
-
-const BLOCKS: BlockTemplate[] = [
-  // Kitchen
-  { id: 'base-cabinet', name: 'Base Cabinet', category: 'kitchen', icon: '🗄️', width: 600, height: 600, type: 'furniture' },
-  { id: 'wall-cabinet', name: 'Wall Cabinet', category: 'kitchen', icon: '📦', width: 600, height: 350, type: 'furniture' },
-  { id: 'sink-unit', name: 'Sink Unit', category: 'kitchen', icon: '🚿', width: 900, height: 600, type: 'furniture' },
-  { id: 'hob-unit', name: 'Hob Unit', category: 'kitchen', icon: '🔥', width: 900, height: 600, type: 'furniture' },
-  { id: 'refrigerator', name: 'Refrigerator', category: 'kitchen', icon: '❄️', width: 600, height: 1800, type: 'furniture' },
-  { id: 'microwave', name: 'Microwave', category: 'kitchen', icon: '📻', width: 600, height: 400, type: 'furniture' },
-  
-  // Bathroom
-  { id: 'wc', name: 'WC', category: 'bathroom', icon: '🚽', width: 400, height: 700, type: 'furniture' },
-  { id: 'wash-basin', name: 'Wash Basin', category: 'bathroom', icon: '🚰', width: 600, height: 400, type: 'furniture' },
-  { id: 'shower-panel', name: 'Shower Panel', category: 'bathroom', icon: '🚿', width: 900, height: 900, type: 'furniture' },
-  { id: 'floor-drain', name: 'Floor Drain', category: 'bathroom', icon: '💧', width: 100, height: 100, type: 'furniture' },
-  
-  // Furniture
-  { id: 'bed-single', name: 'Bed (Single)', category: 'furniture', icon: '🛏️', width: 1000, height: 2000, type: 'furniture' },
-  { id: 'bed-double', name: 'Bed (Double)', category: 'furniture', icon: '🛏️', width: 1600, height: 2000, type: 'furniture' },
-  { id: 'sofa-2', name: 'Sofa (2-seater)', category: 'furniture', icon: '🛋️', width: 1600, height: 800, type: 'furniture' },
-  { id: 'sofa-3', name: 'Sofa (3-seater)', category: 'furniture', icon: '🛋️', width: 2100, height: 800, type: 'furniture' },
-  { id: 'table-round', name: 'Table (Round)', category: 'furniture', icon: '🪑', width: 1200, height: 1200, type: 'furniture' },
-  { id: 'table-rect', name: 'Table (Rect)', category: 'furniture', icon: '🪑', width: 1800, height: 900, type: 'furniture' },
-  { id: 'wardrobe', name: 'Wardrobe', category: 'furniture', icon: '👔', width: 1200, height: 2400, type: 'furniture' },
-  { id: 'tv-unit', name: 'TV Unit', category: 'furniture', icon: '📺', width: 2400, height: 600, type: 'furniture' },
-  
-  // Electrical
-  { id: 'switchboard', name: 'Switchboard', category: 'electrical', icon: '⚡', width: 300, height: 400, type: 'furniture' },
-  { id: 'power-socket', name: 'Power Socket', category: 'electrical', icon: '🔌', width: 100, height: 100, type: 'furniture' },
-  { id: 'light-point', name: 'Light Point', category: 'electrical', icon: '💡', width: 100, height: 100, type: 'furniture' },
-  { id: 'fan-point', name: 'Fan Point', category: 'electrical', icon: '🌀', width: 100, height: 100, type: 'furniture' },
-  { id: 'ac-point', name: 'AC Point', category: 'electrical', icon: '❄️', width: 100, height: 100, type: 'furniture' },
-  
-  // Plumbing
-  { id: 'water-line', name: 'Hot/Cold Water', category: 'plumbing', icon: '🚿', width: 50, height: 50, type: 'furniture' },
-  { id: 'drain-pipe', name: 'Drain Pipe', category: 'plumbing', icon: '💧', width: 50, height: 50, type: 'furniture' },
-];
+const BlockPreview: React.FC<{ block: BlockDefinition }> = ({ block }) => {
+  return (
+    <svg viewBox="0 0 100 100" className="w-12 h-12 text-white">
+      {block.planSymbols.map((shape, index) => {
+        if (shape.kind === 'rect') {
+          return (
+            <rect
+              key={index}
+              x={shape.x * 100}
+              y={shape.y * 100}
+              width={shape.width * 100}
+              height={shape.height * 100}
+              rx={(shape.cornerRadius ?? 0) * 100}
+              ry={(shape.cornerRadius ?? 0) * 100}
+              fill={shape.fill ? 'currentColor' : 'none'}
+              fillOpacity={shape.fill === 'detail' ? 0.2 : 0.05}
+              stroke="currentColor"
+              strokeWidth={(shape.strokeWidth ?? 1) * 1.6}
+              strokeDasharray={shape.dash?.map((d) => d * 100).join(' ') ?? undefined}
+            />
+          );
+        }
+        if (shape.kind === 'line') {
+          return (
+            <line
+              key={index}
+              x1={shape.points[0] * 100}
+              y1={shape.points[1] * 100}
+              x2={shape.points[2] * 100}
+              y2={shape.points[3] * 100}
+              stroke="currentColor"
+              strokeWidth={(shape.strokeWidth ?? 1) * 1.5}
+              strokeDasharray={shape.dash?.map((d) => d * 100).join(' ') ?? undefined}
+            />
+          );
+        }
+        if (shape.kind === 'circle') {
+          return (
+            <circle
+              key={index}
+              cx={shape.x * 100}
+              cy={shape.y * 100}
+              r={shape.radius * 100}
+              fill={shape.fill ? 'currentColor' : 'none'}
+              fillOpacity={shape.fill === 'detail' ? 0.3 : 0.05}
+              stroke="currentColor"
+              strokeWidth={(shape.strokeWidth ?? 1) * 1.4}
+              strokeDasharray={shape.dash?.map((d) => d * 100).join(' ') ?? undefined}
+            />
+          );
+        }
+        return null;
+      })}
+    </svg>
+  );
+};
 
 export const AutoCADBlocksPanel: React.FC = () => {
   const { activeLayerId, drawingSettings, addElement } = useEditorStore();
   const [selectedCategory, setSelectedCategory] = React.useState<string>('kitchen');
+  const blocks = useCatalogStore((state) => state.blocks);
+  const status = useCatalogStore((state) => state.status);
+  const loadBlocks = useCatalogStore((state) => state.loadBlocks);
 
-  const categories = Array.from(new Set(BLOCKS.map((b) => b.category)));
+  React.useEffect(() => {
+    if (status === 'idle') {
+      loadBlocks();
+    }
+  }, [status, loadBlocks]);
 
-  const handleDragStart = (e: React.DragEvent, block: BlockTemplate) => {
-    const data = JSON.stringify(block);
-    e.dataTransfer.setData('application/json', data);
+  const categories = React.useMemo(() => {
+    const unique = new Set(blocks.map((block) => block.category));
+    return Array.from(unique);
+  }, [blocks]);
+
+  React.useEffect(() => {
+    if (!categories.includes(selectedCategory) && categories.length > 0) {
+      setSelectedCategory(categories[0]);
+    }
+  }, [categories, selectedCategory]);
+
+  const handleDragStart = (e: React.DragEvent, block: BlockDefinition) => {
+    e.dataTransfer.setData('application/json', JSON.stringify({ blockId: block.id }));
     e.dataTransfer.effectAllowed = 'copy';
   };
 
-  const handleBlockClick = (block: BlockTemplate) => {
+  const spawnBlock = (block: BlockDefinition) => {
     if (!activeLayerId) return;
-    
-    const element = {
-      id: nanoid(),
-      type: block.type as any,
-      layerId: activeLayerId,
-      x: 0,
-      y: 0,
-      width: block.width,
-      height: block.height,
-      stroke: drawingSettings.strokeColor,
-      strokeWidth: drawingSettings.strokeWidth,
-      fill: drawingSettings.fillColor,
-      opacity: 1,
-      rotation: 0,
-      category: block.category,
-    };
-    
-    addElement(element as any);
+    const element = createFurnitureElement(
+      { x: 0, y: 0 },
+      block.width / 10,
+      block.height / 10,
+      block.category,
+      activeLayerId,
+      {
+        blockId: block.id,
+        blockName: block.name,
+        category: block.category,
+        manufacturer: block.manufacturer,
+        sku: block.sku,
+        tags: block.tags,
+        depth: block.depth ? block.depth / 10 : undefined,
+        moduleClass: block.moduleClass,
+        metadata: {
+          ...(block.description ? { description: block.description } : {}),
+          blockId: block.id,
+        },
+        stroke: drawingSettings.strokeColor,
+        strokeWidth: drawingSettings.strokeWidth,
+        fill: drawingSettings.fillColor,
+      },
+    );
+    addElement(element);
   };
 
-  const filteredBlocks = BLOCKS.filter((b) => b.category === selectedCategory);
+  const filteredBlocks = React.useMemo(
+    () => blocks.filter((block) => block.category === selectedCategory),
+    [blocks, selectedCategory],
+  );
 
   return (
     <div className="w-64 bg-slate-800 border-l border-slate-700 flex flex-col h-full">
@@ -111,20 +150,31 @@ export const AutoCADBlocksPanel: React.FC = () => {
 
       {/* Blocks List */}
       <div className="flex-1 overflow-y-auto p-2">
+        {status === 'loading' && blocks.length === 0 && (
+          <div className="text-center text-slate-400 text-xs py-6">Loading catalog…</div>
+        )}
         {filteredBlocks.map((block) => (
           <div
             key={block.id}
             draggable
             onDragStart={(e) => handleDragStart(e, block)}
-            onClick={() => handleBlockClick(block)}
+            onClick={() => spawnBlock(block)}
             className="flex items-center gap-2 p-2 mb-1 bg-slate-700 hover:bg-slate-600 rounded cursor-move transition-colors"
           >
-            <span className="text-2xl">{block.icon}</span>
+            <div className="flex items-center justify-center rounded bg-slate-900 w-14 h-14 border border-slate-600">
+              <BlockPreview block={block} />
+            </div>
             <div className="flex-1 min-w-0">
               <div className="text-sm text-white truncate">{block.name}</div>
               <div className="text-xs text-slate-400">
                 {block.width} × {block.height}mm
               </div>
+              {block.manufacturer && (
+                <div className="text-[11px] text-slate-500 truncate">{block.manufacturer}</div>
+              )}
+              {block.sku && (
+                <div className="text-[10px] text-slate-500 uppercase tracking-wide">{block.sku}</div>
+              )}
             </div>
           </div>
         ))}

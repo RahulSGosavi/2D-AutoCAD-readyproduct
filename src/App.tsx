@@ -4,7 +4,7 @@ import { Login } from './components/Auth/Login';
 import { Register } from './components/Auth/Register';
 import { ProjectList } from './components/ProjectManager/ProjectList';
 import { CreateProjectModal } from './components/ProjectManager/CreateProjectModal';
-import { AutoCADMainLayout } from './layout/AutoCADMainLayout';
+import { ModernLayout } from './layout/ModernLayout';
 
 type AuthState = 'login' | 'register' | 'authenticated' | 'loading';
 
@@ -115,7 +115,7 @@ function App() {
   }
 
   return (
-    <AutoCADMainLayout 
+    <ModernLayout 
       projectId={currentProjectId} 
       onBackToProjects={handleBackToProjects}
       onLogout={handleLogout}

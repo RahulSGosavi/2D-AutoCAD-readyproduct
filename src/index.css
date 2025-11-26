@@ -6,12 +6,243 @@
   font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
   color: theme('colors.slate.100');
   background-color: theme('colors.surface.DEFAULT');
+  
+  /* Touch-friendly defaults */
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  
+  /* Smooth scrolling */
+  scroll-behavior: smooth;
+  
+  /* Color scheme */
+  color-scheme: dark;
+}
+
+/* Light mode */
+.light {
+  color-scheme: light;
+  --bg-primary: #f8fafc;
+  --bg-secondary: #f1f5f9;
+  --bg-tertiary: #e2e8f0;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --border-color: #cbd5e1;
+}
+
+/* Dark mode */
+.dark {
+  color-scheme: dark;
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-tertiary: #334155;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --border-color: #334155;
 }
 
 body {
   @apply m-0 min-h-screen bg-surface text-slate-100 antialiased;
+  
+  /* Prevent pull-to-refresh on mobile */
+  overscroll-behavior: none;
+  
+  /* Better font rendering */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 #root {
   @apply min-h-screen;
+}
+
+/* Touch-friendly button sizes */
+@layer components {
+  .touch-target {
+    @apply min-w-[44px] min-h-[44px];
+  }
+}
+
+/* Smooth transitions */
+* {
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.4);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.6);
+}
+
+/* Hide scrollbar on touch devices */
+@media (hover: none) {
+  ::-webkit-scrollbar {
+    display: none;
+  }
+  
+  * {
+    scrollbar-width: none;
+  }
+}
+
+/* Smooth animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(6, 182, 212, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 20px 5px rgba(6, 182, 212, 0.2);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.3s ease-out forwards;
+}
+
+.animate-fade-in-down {
+  animation: fadeInDown 0.3s ease-out forwards;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.2s ease-out forwards;
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 0.3s ease-out forwards;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Glass morphism effect */
+.glass {
+  background: rgba(15, 23, 42, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(51, 65, 85, 0.5);
+}
+
+.light .glass {
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(203, 213, 225, 0.5);
+}
+
+/* Touch manipulation for better touch response */
+.touch-manipulation {
+  touch-action: manipulation;
+}
+
+/* Prevent text selection during drag */
+.no-select {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Active state for touch devices */
+@media (hover: none) {
+  button:active,
+  [role="button"]:active {
+    transform: scale(0.97);
+  }
+}
+
+/* iPad/Tablet specific styles */
+@media (min-width: 768px) and (max-width: 1024px) and (hover: none) {
+  /* Larger touch targets for tablets */
+  button,
+  [role="button"],
+  input,
+  select {
+    min-height: 48px;
+  }
+  
+  /* More padding for tablet panels */
+  .panel-content {
+    padding: 16px;
+  }
+}
+
+/* Apple Pencil hover support */
+@supports (-webkit-touch-callout: none) {
+  .pencil-hover:hover {
+    background-color: rgba(6, 182, 212, 0.1);
+  }
+}
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
