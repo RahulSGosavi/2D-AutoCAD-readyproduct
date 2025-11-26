@@ -223,6 +223,223 @@ npm run build
 - Check token expiration
 - Clear browser localStorage
 
+## 📖 User Manual
+
+### Getting Started
+
+After launching the application, you'll see the main canvas with toolbars on all sides:
+- **Left Toolbar**: Drawing and selection tools
+- **Top Bar**: File operations, panels, and search
+- **Bottom Bar**: View modes, zoom, export, and settings
+- **Right Panels**: Blocks, Layers, and Properties
+
+---
+
+### 🖱️ Selection & Navigation Tools
+
+| Tool | Shortcut | Description |
+|------|----------|-------------|
+| **Select** | V | Click to select elements. Shift+Click for multi-select. Drag to create selection window. |
+| **Pan** | H | Click and drag to pan the canvas. Also use middle mouse button or hold Space. |
+| **Zoom** | Mouse Wheel | Scroll to zoom in/out. Use zoom controls in top-right corner. |
+
+---
+
+### ✏️ Drawing Tools
+
+| Tool | Shortcut | How to Use |
+|------|----------|------------|
+| **Line** | L | Click start point, click end point. |
+| **Polyline** | PL | Click multiple points to create connected lines. Double-click or press Enter to finish. |
+| **Rectangle** | R | Click and drag from corner to opposite corner. |
+| **Circle** | C | Click center point, then click to set radius. |
+| **Ellipse** | EL | Click center, drag to set horizontal and vertical radii. |
+| **Arc** | A | Click center, then click to define the arc curve. |
+| **Freehand/Pencil** | P | Click and drag to draw freehand lines. |
+| **Text** | T | Click to place text, then type. Press Enter to confirm. |
+
+---
+
+### 🏗️ Architecture Tools
+
+| Tool | Shortcut | How to Use |
+|------|----------|------------|
+| **Wall** | W | Click start point, click end point. Walls have thickness and snap to other walls. |
+| **Door** | D | Click on a wall to place a door. Door will align with wall angle. |
+| **Window** | N | Click on a wall to place a window. Window will align with wall angle. |
+
+---
+
+### 📐 Dimension & Measurement
+
+| Tool | Shortcut | How to Use |
+|------|----------|------------|
+| **Dimension** | M | Click start point, click end point to create a dimension line with measurement. |
+
+---
+
+### 🗑️ Editing Tools
+
+| Tool | Shortcut | How to Use |
+|------|----------|------------|
+| **Erase** | E | Click on elements to delete them. |
+| **Delete** | Del/Backspace | Delete selected elements. |
+| **Undo** | Ctrl+Z | Undo last action. |
+| **Redo** | Ctrl+Y | Redo undone action. |
+
+---
+
+### 🪑 Blocks Panel (Right Side)
+
+The Blocks panel contains furniture, appliances, and fixtures:
+
+1. **Search**: Type to filter blocks by name
+2. **Categories**: Click "All" or specific category buttons
+3. **Drag & Drop**: Drag any block onto the canvas to place it
+4. **Available Categories**:
+   - Beds (Single, Double, King)
+   - Sofas (2-seater, 3-seater, L-shaped)
+   - Tables (Dining, Coffee, Side)
+   - Cabinets (Base, Wall, Wardrobe)
+   - Kitchen (Sink, Hob, Refrigerator)
+   - Bathroom (WC, Basin, Shower)
+
+---
+
+### 📚 Layers Panel (Right Side)
+
+Manage drawing layers for organization:
+
+1. **Add Layer**: Click "+" to create new layer
+2. **Select Layer**: Click layer name to make it active
+3. **Toggle Visibility**: Click eye icon to show/hide layer
+4. **Lock Layer**: Click lock icon to prevent editing
+5. **Rename**: Double-click layer name to rename
+
+---
+
+### ⚙️ Properties Panel (Right Side)
+
+When an element is selected:
+
+1. **Position**: X and Y coordinates
+2. **Size**: Width and Height (for applicable elements)
+3. **Rotation**: Rotate element 0-360 degrees using slider
+4. **Stroke Color**: Line/border color
+5. **Fill Color**: Interior fill color
+6. **Stroke Width**: Line thickness
+
+---
+
+### 🎨 Global Attributes (Top Bar → Toggle)
+
+Apply changes to multiple elements at once:
+
+1. **Category Selection**: All, Cabinets, Furniture, Walls, or Selected
+2. **Stroke Color**: Apply stroke color to category
+3. **Fill Color**: Apply fill color to category
+4. Click "Apply to [Category]" to execute
+
+---
+
+### 📄 PDF Import & Export
+
+#### Importing PDF:
+1. Click **Upload** button (bottom bar)
+2. Select a PDF file
+3. PDF loads as background - use page navigation to switch pages
+4. Draw on top of the PDF - drawings are page-specific
+
+#### Exporting:
+1. Click **Download** button (bottom bar)
+2. Choose export format:
+   - **PDF - Current Page**: Export only the current PDF page with your drawings
+   - **PDF - All Pages**: Export all pages with their respective drawings
+   - **PNG (4K)**: High-resolution image export
+   - **JSON**: Save project for later editing
+
+---
+
+### 🖼️ View Modes (Bottom Bar)
+
+| Mode | Description |
+|------|-------------|
+| **Floor Plan** | Main drawing canvas for creating floor plans |
+| **Layout** | Arrange floor plans and title blocks for printing/export |
+
+---
+
+### 📐 Layout Page (Print Preparation)
+
+1. Switch to **Layout** mode from bottom bar
+2. **Paper Size**: Select A4, A3, A2, A1, Letter, Legal, or Tabloid
+3. **Orientation**: Portrait or Landscape
+4. **Title Block**: Edit company name, project name, customer info, date, scale
+5. **Pages**: Add multiple pages, each can show different floor plan pages
+6. **Export**: 
+   - "Export This Page" - Single page PDF
+   - "Export All Pages" - Multi-page PDF document
+
+---
+
+### 🔧 Bottom Bar Controls
+
+| Control | Description |
+|---------|-------------|
+| **Grid** | Toggle snap grid visibility |
+| **Snap** | Toggle snapping to grid/elements |
+| **Collision** | Toggle collision detection |
+| **Ortho** | Toggle orthogonal mode (horizontal/vertical lines only) |
+| **Link** | Toggle link mode (keep elements attached) |
+| **Zoom %** | Current zoom level - click to reset to 100% |
+| **Unit** | Switch between mm, cm, m, in, ft |
+
+---
+
+### ⌨️ Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| **Ctrl+Z** | Undo |
+| **Ctrl+Y** | Redo |
+| **Ctrl+K** | Open command palette |
+| **Delete/Backspace** | Delete selected |
+| **Escape** | Cancel current operation / Deselect |
+| **Space (hold)** | Temporary pan mode |
+| **Shift+Click** | Add to selection |
+
+---
+
+### 🖱️ Right-Click Context Menu
+
+Right-click on any selected element for:
+- **Duplicate**: Create a copy offset by 20px
+- **Delete**: Remove the element
+- **Center On...**: Center element on another (select 2 elements first)
+- **Rotate 90°**: Rotate element by 90 degrees
+- **Flip Horizontal**: Mirror element horizontally
+- **Flip Vertical**: Mirror element vertically
+
+---
+
+### 💾 Auto-Save & Manual Save
+
+- **Auto-Save**: Enabled by default - saves every few seconds
+- **Manual Save**: Click "Save" button in floor plan page tabs
+- **AutoSave Toggle**: Check/uncheck "AutoSave" checkbox to enable/disable
+
+---
+
+### 📱 Multi-Page Floor Plans
+
+1. **Add Page**: Click "+" next to page tabs at bottom of canvas
+2. **Switch Pages**: Click on page tab (Page 1, Page 2, etc.)
+3. **Rename Page**: Double-click page tab to rename
+4. **Delete Page**: Right-click page tab (if more than one page)
+5. Each page maintains separate drawings
+
+---
+
 ## 📄 License
 
 [Your License Here]
