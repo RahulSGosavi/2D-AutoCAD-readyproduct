@@ -45,11 +45,12 @@ export const LeftToolbar: React.FC = () => {
 
   return (
     <div
-      className="flex flex-col items-center py-1 gap-0.5 z-50"
+      className="flex flex-col items-center py-1 gap-0.5 z-50 overflow-y-auto overflow-x-hidden"
       style={{
-        width: 40,
+        width: 32,
         backgroundColor: isDark ? '#0f172a' : '#f1f5f9',
         borderRight: `1px solid ${isDark ? '#334155' : '#cbd5e1'}`,
+        scrollbarWidth: 'none',
       }}
     >
       {tools.map((t) => {
@@ -60,11 +61,11 @@ export const LeftToolbar: React.FC = () => {
             key={t.id}
             onClick={() => setTool(t.id as any)}
             title={t.label}
-            className="relative flex items-center justify-center transition-all duration-150 active:scale-90"
+            className="relative flex items-center justify-center transition-all duration-150 active:scale-90 flex-shrink-0"
             style={{
-              width: 34,
-              height: 34,
-              borderRadius: 6,
+              width: 26,
+              height: 26,
+              borderRadius: 4,
               backgroundColor: isActive 
                 ? (isDark ? '#0ea5e9' : '#0284c7')
                 : 'transparent',
@@ -73,7 +74,7 @@ export const LeftToolbar: React.FC = () => {
                 : (isDark ? '#94a3b8' : '#64748b'),
             }}
           >
-            <Icon size={18} strokeWidth={isActive ? 2.5 : 2} />
+            <Icon size={14} strokeWidth={isActive ? 2.5 : 2} />
           </button>
         );
       })}

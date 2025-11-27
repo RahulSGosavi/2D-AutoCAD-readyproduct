@@ -1190,9 +1190,9 @@ export const DrawingLayoutCanvas: React.FC = () => {
       </div>
 
       {/* Canvas Area */}
-      <div className="flex-1 overflow-auto p-4 flex flex-col items-center justify-center bg-slate-500">
+      <div className="flex-1 overflow-auto p-2 flex flex-col items-center justify-start bg-slate-500">
         {/* Page navigation */}
-        <div className="flex items-center gap-4 mb-4">
+        <div className="flex items-center gap-3 mb-2">
           <button
             onClick={() => setCurrentPage(Math.max(0, currentPage - 1))}
             disabled={currentPage === 0}
@@ -1213,7 +1213,7 @@ export const DrawingLayoutCanvas: React.FC = () => {
         </div>
 
         {/* Zoom controls for HD view */}
-        <div className="flex items-center justify-center gap-2 mb-3">
+        <div className="flex items-center justify-center gap-2 mb-2">
           <button
             onClick={() => setZoomLevel(Math.max(0.5, zoomLevel - 0.25))}
             className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-white rounded text-sm"
@@ -1249,9 +1249,10 @@ export const DrawingLayoutCanvas: React.FC = () => {
 
         {/* Paper preview - HD quality with zoom */}
         <div 
-          className="shadow-2xl overflow-auto max-h-[calc(100vh-450px)]"
+          className="shadow-2xl overflow-auto"
           style={{ 
             maxWidth: '100%',
+            maxHeight: 'calc(100vh - 200px)',
           }}
         >
           <Stage
@@ -1293,7 +1294,7 @@ export const DrawingLayoutCanvas: React.FC = () => {
         </div>
         
         {/* Paper info */}
-        <div className="mt-3 text-slate-300 text-xs">
+        <div className="mt-1 text-slate-300 text-xs">
           {paperSize} {orientation} • {paper.width}×{paper.height}mm • Zoom: {Math.round(zoomLevel * 100)}%
         </div>
       </div>

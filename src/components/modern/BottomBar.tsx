@@ -250,9 +250,10 @@ export const BottomBar: React.FC = () => {
       )}
       
       <div
-        className="flex items-center justify-between px-3 z-50"
+        className="flex items-center justify-between px-2 z-50 flex-shrink-0"
         style={{
-          height: 28,
+          height: 26,
+          minHeight: 26,
           backgroundColor: bgColor,
           borderTop: `1px solid ${borderColor}`,
         }}

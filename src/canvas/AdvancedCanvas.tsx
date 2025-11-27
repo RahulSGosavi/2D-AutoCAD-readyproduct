@@ -5417,16 +5417,19 @@ export const AdvancedCanvas: React.FC = () => {
         />
       )}
 
-      {/* Floor Plan Page Tabs - Bottom */}
-      <div className="absolute bottom-0 left-0 right-0 z-50 bg-slate-800/95 backdrop-blur border-t border-slate-700 flex items-center px-2 py-1.5 gap-1">
-        {/* Page Tabs */}
-        <div className="flex items-center gap-1 flex-1 overflow-x-auto">
-          {floorPlanPages.map((page, index) => (
+      {/* Floor Plan Page Tabs - Compact bottom bar */}
+      <div 
+        className="absolute left-0 right-0 z-40 bg-slate-800 border-t border-slate-700 flex items-center justify-between px-1"
+        style={{ bottom: 0, height: 28 }}
+      >
+        {/* Left: Page Tabs */}
+        <div className="flex items-center gap-0.5 overflow-x-auto" style={{ maxWidth: '60%' }}>
+          {floorPlanPages.map((page) => (
             <div
               key={page.id}
-              className={`flex items-center gap-1 px-3 py-1.5 rounded-t-lg cursor-pointer transition-all min-w-[80px] ${
+              className={`flex items-center px-2 py-0.5 rounded cursor-pointer text-[11px] whitespace-nowrap ${
                 page.id === currentFloorPlanPageId
-                  ? 'bg-white text-slate-800 font-medium'
+                  ? 'bg-cyan-600 text-white'
                   : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
               }`}
               onClick={() => setCurrentFloorPlanPage(page.id)}
@@ -5441,88 +5444,54 @@ export const AdvancedCanvas: React.FC = () => {
                   value={editingPageName}
                   onChange={(e) => setEditingPageName(e.target.value)}
                   onBlur={() => {
-                    if (editingPageName.trim()) {
-                      renameFloorPlanPage(page.id, editingPageName.trim());
-                    }
+                    if (editingPageName.trim()) renameFloorPlanPage(page.id, editingPageName.trim());
                     setEditingPageId(null);
                   }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
-                      if (editingPageName.trim()) {
-                        renameFloorPlanPage(page.id, editingPageName.trim());
-                      }
+                      if (editingPageName.trim()) renameFloorPlanPage(page.id, editingPageName.trim());
                       setEditingPageId(null);
-                    } else if (e.key === 'Escape') {
-                      setEditingPageId(null);
-                    }
+                    } else if (e.key === 'Escape') setEditingPageId(null);
                   }}
                   onClick={(e) => e.stopPropagation()}
-                  className="w-20 px-1 py-0 text-xs bg-white border border-slate-300 rounded text-slate-800"
+                  className="w-16 px-1 text-[11px] bg-white border rounded text-slate-800"
                   autoFocus
                 />
               ) : (
-                <>
-                  <span className="text-xs truncate">{page.name}</span>
-                  {floorPlanPages.length > 1 && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        removeFloorPlanPage(page.id);
-                      }}
-                      className="ml-1 w-4 h-4 flex items-center justify-center rounded hover:bg-red-500 hover:text-white transition-colors"
-                      title="Remove Page"
-                    >
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                      </svg>
-                    </button>
-                  )}
-                </>
+                <span>{page.name}</span>
+              )}
+              {floorPlanPages.length > 1 && page.id === currentFloorPlanPageId && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); removeFloorPlanPage(page.id); }}
+                  className="ml-1 text-white/70 hover:text-white"
+                  title="Remove"
+                >×</button>
               )}
             </div>
           ))}
-          
-          {/* Add Page Button */}
           <button
             onClick={() => addFloorPlanPage()}
-            className="flex items-center justify-center w-8 h-8 rounded bg-slate-700 text-slate-300 hover:bg-cyan-600 hover:text-white transition-colors"
-            title="Add New Page"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-          </button>
+            className="flex items-center justify-center w-5 h-5 rounded bg-slate-700 text-slate-400 hover:bg-cyan-600 hover:text-white text-sm"
+            title="Add Page"
+          >+</button>
         </div>
 
-        {/* Auto-save Controls */}
-        <div className="flex items-center gap-2 ml-4 border-l border-slate-600 pl-4">
+        {/* Right: Save Controls */}
+        <div className="flex items-center gap-2">
           <button
             onClick={() => saveCurrentPageElements()}
-            className="flex items-center gap-1 px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-emerald-600 hover:text-white transition-colors text-xs"
-            title="Save Now"
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-              <polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
-            </svg>
-            Save
-          </button>
-          
-          <label className="flex items-center gap-1.5 cursor-pointer">
+            className="flex items-center gap-1 px-2 py-0.5 rounded bg-slate-700 text-slate-300 hover:bg-emerald-600 hover:text-white text-[11px]"
+            title="Save"
+          >💾 Save</button>
+          <label className="flex items-center gap-1 cursor-pointer text-[11px] text-slate-400">
             <input
               type="checkbox"
               checked={autoSaveEnabled}
               onChange={(e) => setAutoSaveEnabled(e.target.checked)}
-              className="w-3 h-3 rounded accent-emerald-500"
+              className="w-3 h-3 accent-emerald-500"
             />
-            <span className="text-xs text-slate-400">AutoSave</span>
+            AutoSave
           </label>
-          
-          {lastAutoSave && (
-            <span className="text-[10px] text-slate-500">
-              Saved {new Date(lastAutoSave).toLocaleTimeString()}
-            </span>
-          )}
         </div>
       </div>
     </div>

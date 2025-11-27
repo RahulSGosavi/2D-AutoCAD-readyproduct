@@ -78,14 +78,14 @@ export const ProjectList = ({ onSelectProject, onCreateNew, onRefresh, onLogout 
         <div className="flex items-center gap-2">
           <button
             onClick={onCreateNew}
-            className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition hover:bg-accent/90"
+            className="rounded bg-accent px-3 py-1.5 text-xs font-medium text-white transition hover:bg-accent/90"
           >
             + New Project
           </button>
           {onLogout && (
             <button
               onClick={onLogout}
-              className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 border border-outline transition hover:bg-surface-sunken hover:text-slate-100"
+              className="rounded px-3 py-1.5 text-xs font-medium text-slate-300 border border-outline transition hover:bg-surface-sunken hover:text-slate-100"
               title="Logout"
             >
               Logout
@@ -133,10 +133,10 @@ export const ProjectList = ({ onSelectProject, onCreateNew, onRefresh, onLogout 
                 </div>
                 <button
                   onClick={(e) => handleDelete(project.id, e)}
-                  className="ml-2 rounded px-2 py-1 text-sm text-red-400 border border-red-500/30 transition hover:bg-red-500/20 hover:border-red-500/50"
+                  className="ml-2 rounded px-2 py-0.5 text-xs text-red-400 border border-red-500/30 transition hover:bg-red-500/20 hover:border-red-500/50"
                   title="Delete project"
                 >
-                  <svg className="h-4 w-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="h-3 w-3 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>
                   Delete
