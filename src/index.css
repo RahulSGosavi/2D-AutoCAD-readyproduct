@@ -3,12 +3,12 @@
 @tailwind utilities;
 
 html {
-  font-size: 14px;
+  font-size: 13px !important;
+  -webkit-text-size-adjust: 100%;
 }
 
 :root {
   font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
-  font-size: 16px;
   color: theme('colors.slate.100');
   background-color: theme('colors.surface.DEFAULT');
   
