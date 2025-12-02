@@ -1,6 +1,6 @@
 # Render Deployment Guide
 
-This guide will help you deploy the KAB 2D Design Tool to Render.
+This guide will help you deploy the KABS 2D Design Tool to Render.
 
 ## Repository
 - **GitHub**: https://github.com/RahulSGosavi/2D-AutoCAD-readyproduct.git

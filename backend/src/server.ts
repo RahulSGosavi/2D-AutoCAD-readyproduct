@@ -51,7 +51,7 @@ if (process.env.NODE_ENV === 'development') {
 // Basic root route for uptime checks
 app.get('/', (req, res) => {
   res.json({
-    service: 'KAB 2D Design Tool API',
+    service: 'KABS 2D Design Tool API',
     status: 'ok',
     docs: '/api',
   });

@@ -87,7 +87,7 @@ function App() {
         <div className="flex h-screen bg-slate-900">
           <div className="w-80 border-r border-outline bg-surface-raised p-6">
             <div className="mb-4">
-              <h1 className="text-xl font-bold text-slate-100">KAB Design Tool</h1>
+              <h1 className="text-xl font-bold text-slate-100">KABS Design Tool</h1>
             </div>
             <ProjectList
               onSelectProject={handleSelectProject}

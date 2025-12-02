@@ -1,6 +1,6 @@
-# Production Setup Guide - KAB 2D Design Tool
+# Production Setup Guide - KABS 2D Design Tool
 
-This guide will help you set up the KAB 2D Design Tool for production use with database connectivity and multi-tenant support.
+This guide will help you set up the KABS 2D Design Tool for production use with database connectivity and multi-tenant support.
 
 ## Prerequisites
 
@@ -131,7 +131,7 @@ RATE_LIMIT_MAX_REQUESTS=100
 #### Frontend (.env)
 ```env
 VITE_API_URL=https://api.yourdomain.com/api
-VITE_APP_NAME=KAB 2D Design Tool
+VITE_APP_NAME=KABS 2D Design Tool
 ```
 
 ## Production Deployment

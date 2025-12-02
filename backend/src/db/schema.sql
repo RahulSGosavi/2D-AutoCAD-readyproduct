@@ -1,4 +1,4 @@
--- KAB 2D Design Tool Database Schema
+-- KABS 2D Design Tool Database Schema
 -- Multi-tenant architecture for production use
 
 -- Enable UUID extension

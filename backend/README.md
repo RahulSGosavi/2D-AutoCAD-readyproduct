@@ -1,6 +1,6 @@
-# KAB 2D Design Tool - Backend API
+# KABS 2D Design Tool - Backend API
 
-Production-ready backend API for the KAB 2D Design Tool with multi-tenant support.
+Production-ready backend API for the KABS 2D Design Tool with multi-tenant support.
 
 ## Features
 

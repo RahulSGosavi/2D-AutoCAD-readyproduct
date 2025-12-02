@@ -2,7 +2,7 @@
   "name": "kab-2d-design-tool-backend",
   "version": "1.0.0",
   "type": "module",
-  "description": "Backend API for KAB 2D Design Tool",
+  "description": "Backend API for KABS 2D Design Tool",
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",

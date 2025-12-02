@@ -1,4 +1,4 @@
-# KAB 2D Design Tool
+# KABS 2D Design Tool
 
 A production-ready, industry-standard 2D CAD design tool built with React, TypeScript, and Konva. Features multi-tenant architecture, database connectivity, and enterprise-grade security.
 
@@ -106,7 +106,7 @@ See `backend/src/db/schema.sql` for complete schema.
 ### Frontend (.env)
 ```env
 VITE_API_URL=http://localhost:3001/api
-VITE_APP_NAME=KAB 2D Design Tool
+VITE_APP_NAME=KABS 2D Design Tool
 ```
 
 ### Backend (.env)
